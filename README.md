@@ -6,7 +6,7 @@ All documentation will be kept in the **Wiki** section of this repository.
 
 
 ## Contributors
-- [Ad Soyad]([https://github.com/<kullanici>](https://github.com/aysenurunal))
+- [Ayşenur Ünal]([https://github.com/<kullanici>](https://github.com/aysenurunal))
 
 ## Contact
 - E-mail: aysenur.unal011@gmail.com
