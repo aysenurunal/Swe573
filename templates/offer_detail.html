@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ offer.title }} — The Hive{% endblock %}
+{% block content %}
+
+<div class="offer-card">
+
+  {% if offer.image_filename %}
+    <img src="{{ url_for('static', filename='uploads/' ~ offer.image_filename) }}"
+         style="width:100%; border-radius:8px; margin-bottom:12px;">
+  {% endif %}
+
+  <h2>{{ offer.title }}</h2>
+  <p><strong>Hours:</strong> {{ offer.hours }}</p>
+  <p><strong>Location:</strong> {{ offer.location }}</p>
+  <p style="margin-top:12px;">{{ offer.description }}</p>
+
+  <hr style="margin: 18px 0; opacity:0.5;">
+
+  <!-- Map Container -->
+  <h3>Location on Map</h3>
+  <div id="map" style="height:400px; border-radius:10px; margin-top:10px;"></div>
+
+</div>
+
+<!-- LEAFLET MAP LIBRARY -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- MAP SCRIPT -->
+<script>
+  const lat = {{ offer.latitude|default("null") }};
+  const lon = {{ offer.longitude|default("null") }};
+
+  if (lat && lon) {
+    const map = L.map('map').setView([lat, lon], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+
+    L.marker([lat, lon]).addTo(map)
+      .bindPopup("{{ offer.location }}")
+      .openPopup();
+  } else {
+    document.getElementById('map').innerHTML = "🔍 Location could not be mapped.";
+    document.getElementById('map').style.textAlign = "center";
+    document.getElementById('map').style.padding = "40px";
+  }
+</script>
+
+{% endblock %}

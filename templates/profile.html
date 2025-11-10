@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}My Profile — The Hive{% endblock %}
+{% block content %}
+
+<h2>My Profile</h2>
+
+<p><strong>Email:</strong> {{ user.email }}</p>
+<p><strong>Timebank Balance:</strong> {{ user.timebank_balance }} hours</p>
+
+<h3 style="margin-top:24px;">My Offers</h3>
+
+{% if user.offers %}
+  {% for offer in user.offers %}
+  <div class="offer-card">
+    <strong>{{ offer.title }}</strong><br>
+    {{ offer.hours }} hours — {{ offer.location }}
+    <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">
+      {{ offer.description }}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">You haven’t posted any offers yet.</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Add Offer — The Hive{% endblock %}
+{% block content %}
+
+<h2 style="margin-bottom:16px;">Create a New Offer</h2>
+
+<form action="/add-offer" method="POST" enctype="multipart/form-data" class="card" style="color:black; background:white;">
+    <input type="file" name="image" accept="image/*"
+           style="margin-top:8px; width:100%; padding:10px;">
+    <button class="btn" type="submit" sytle="margin-top:12px; width:100%;">Publish Offer</button>
+    <input type="text" name="title" placeholder="Title (e.g., Math tutoring)" required style="margin-top:8px; width:100%; padding:10px;">
+
+    <textarea name="description" placeholder="Describe your offer..." required style="margin-top:8px; width:100%; padding:10px;"></textarea>
+
+    <input type="number" name="hours" placeholder="Hours needed" min="1" required style="margin-top:8px; width:100%; padding:10px;">
+
+    <input type="text" name="location" placeholder="Location (City/District, or 'Online')" required style="margin-top:8px; width:100%; padding:10px;">
+
+    <!-- ✅ NEW: Image Upload -->
+    <label class="muted" style="margin-top:10px;">Optional: Upload an Image</label>
+    <input type="file" name="image" accept="image/*" style="margin-top:6px;">
+
+    <button class="btn" type="submit" style="margin-top:12px; width:100%;">Publish Offer</button>
+</form>
+
+{% endblock %}
+
