@@ -89,8 +89,8 @@ with app.app_context():
     _create_tables_if_missing()
 
 
-@app.before_first_request
-def ensure_tables_on_request():
+@app.before_serving
+def ensure_tables_on_serve():
     _create_tables_if_missing()
 
 # ---------- ROUTES ----------
