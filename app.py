@@ -77,28 +77,19 @@ class Proposal(db.Model):
     status = db.Column(db.String(20), default="pending")
 
 # Ensure tables exist when the app starts
-_tables_initialized = False
-
 
 def _create_tables_if_missing():
-    global _tables_initialized
-
-    if _tables_initialized:
-        return
-
     try:
         db.create_all()
     except SQLAlchemyError:
         app.logger.exception("Database initialization failed")
-    else:
-        _tables_initialized = True
 
 
 with app.app_context():
     _create_tables_if_missing()
 
 
-@app.before_request
+@app.before_first_request
 def ensure_tables_on_request():
     _create_tables_if_missing()
 
