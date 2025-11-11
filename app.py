@@ -6,6 +6,8 @@ from flask_bcrypt import Bcrypt
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
 from datetime import datetime, timedelta
+from sqlalchemy import inspect
+from sqlalchemy.exc import OperationalError
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -74,6 +76,27 @@ class Proposal(db.Model):
     proposer_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
     hours = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), default="pending")
+
+# Ensure tables exist when the app starts
+
+def _create_tables_if_missing():
+    try:
+        inspector = inspect(db.engine)
+        existing_tables = set(inspector.get_table_names())
+        defined_tables = set(db.metadata.tables.keys())
+        if not defined_tables.issubset(existing_tables):
+            db.create_all()
+    except OperationalError as exc:
+        app.logger.error("Database initialization failed: %s", exc)
+
+
+with app.app_context():
+    _create_tables_if_missing()
+
+
+@app.before_first_request
+def ensure_tables_on_request():
+    _create_tables_if_missing()
 
 # ---------- ROUTES ----------
 
