@@ -23,7 +23,7 @@ services:
     depends_on:
       - db
     environment:
-      DATABASE_URL: postgresql://dev-db-023163:AVNS_7GGf-O3O8mXuIoen6BZ@app-2d3dbb24-06fd-4ea8-84d8-3bf2f0401edf-do-user-17857016-0.m.db.ondigitalocean.com:25060/dev-db-023163?sslmode=require
+      DATABASE_URL: postgresql://postgres:postgres@the-hive-db:5432/thehive
 
 volumes:
   hive-db-data:
