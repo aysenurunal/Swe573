@@ -17,8 +17,9 @@
       padding:16px 20px;
       background:#111;
       color:#fff;
-      font-size:1.2rem;
+      font-size:1.3rem;
       font-weight:600;
+      text-align:center;
     }
 
     main{
@@ -54,6 +55,10 @@
       border:none;
       cursor:pointer;
       font-weight:600;
+      transition:0.2s;
+    }
+    .search-btn:hover {
+      background:#ffe58a;
     }
 
     /* ---- Offer Cards ---- */
@@ -66,13 +71,75 @@
       font-size:1rem;
     }
 
+    .offer-card a.offer-link {
+      color:#ffd84d;
+      font-weight:600;
+      text-decoration:none;
+    }
+
+    .offer-card a.offer-link:hover {
+      text-decoration:underline;
+    }
+
+    .offer-title {
+      font-size: 1.9rem;
+      font-weight: 600;
+      text-align:center;
+      margin-bottom: 12px;
+      color:#ffd84d;
+    }
+
+    /* ---- Buttons ---- */
+    .btn-msg {
+      background:#FFD84D;
+      color:#111;
+      padding:10px 18px;
+      border-radius:8px;
+      font-weight:600;
+      text-decoration:none;
+      display:inline-block;
+      transition:0.2s ease;
+    }
+    .btn-msg:hover {
+      background:#FFEB91;
+      transform:scale(1.04);
+    }
+
+    .btn-hour {
+      background:#374151;
+      color:#fff;
+      padding:8px 14px;
+      border-radius:8px;
+      text-decoration:none;
+      font-size:0.9rem;
+    }
+    .btn-hour:hover {
+      background:#4b5563;
+    }
+
+      .btn-msg {
+        background:#FFD84D;
+        color:#111;
+        padding:10px 18px;
+        border-radius:8px;
+        font-weight:600;
+        text-decoration:none;
+        display:inline-block;
+        transition:0.2s ease;
+      }
+      .btn-msg:hover {
+        background:#FFEB91;
+        transform:scale(1.04);
+      }
+
+
     /* ---- Bottom Navigation ---- */
     .nav-bottom{
       position:fixed;
       left:0; right:0; bottom:0;
       display:flex;
       gap:8px;
-      justify-content:center;
+      justify-content:space-around;
       background:#111;
       padding:10px;
     }
@@ -89,13 +156,15 @@
     .nav-bottom a:hover{
       background:#4b5563;
     }
+
+
   </style>
 
 </head>
 <body>
 
 <header>
-  <strong>The Hive</strong>
+  The Hive
 </header>
 
 <main>
@@ -106,10 +175,12 @@
   <a href="{{ url_for('index') }}">Main Page</a>
   <a href="#">Offers</a>
   <a href="#">Favs</a>
-  <a href="#">Messages</a>
-  <a href="{{ url_for('profile') }}">My Profile</a>
+  <a href="{{ url_for('messages_list') }}">Messages</a>
+  <a href="{{ url_for('my_profile') }}">My Profile</a>
   <a href="/add-offer">Add Offer</a>
 </nav>
 
+
 </body>
 </html>
+

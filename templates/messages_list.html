@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Messages — The Hive{% endblock %}
+{% block content %}
+
+<h2 style="margin-bottom:16px;">Messages</h2>
+
+{% if conversations %}
+  {% for c in conversations %}
+    <a href="{{ url_for('chat', user_id=c.user_id) }}"
+       style="text-decoration:none; color:#e5e7eb;">
+      <div class="offer-card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong>{{ c.email }}</strong><br>
+          <span style="opacity:.8;">{{ c.last_message }}</span>
+        </div>
+        <span style="opacity:.6; font-size:.85rem;">{{ c.last_time }}</span>
+      </div>
+    </a>
+  {% endfor %}
+
+{% else %}
+  <p class="muted">No conversations yet.</p>
+{% endif %}
+
+{% endblock %}
+l>

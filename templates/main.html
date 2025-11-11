@@ -2,7 +2,6 @@
 {% block title %}The Hive — Home{% endblock %}
 {% block content %}
 
-<!-- Search -->
 <form action="/" method="get" class="search-bar">
   <input type="text" name="q"
          placeholder="Search: keywords, tags, city/district"
@@ -10,24 +9,15 @@
   <button class="search-btn" type="submit">Search</button>
 </form>
 
-<!-- Offer List -->
 {% for offer in offers %}
 <div class="offer-card">
 
-  <!-- Offer Image (thumbnail) -->
-  {% if offer.image_filename %}
-    <img src="{{ url_for('static', filename='uploads/' ~ offer.image_filename) }}"
-         style="width:100%; border-radius:8px; margin-bottom:8px;">
-  {% endif %}
-
-  <!-- Click to go to detail page -->
   <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}"
      style="color:#ffd84d; font-weight:600; text-decoration:none;">
     {{ offer.title }}
   </a>
   — {{ offer.hours }} hours — {{ offer.location }}
 
-  <!-- Favorite Button -->
   <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
     <button style="background:none;border:none;cursor:pointer;font-size:20px;color:red;">
       {% if offer.offer_id in user_favorites %}
@@ -38,10 +28,17 @@
     </button>
   </form>
 
+  <div class="small muted">
+    Posted by <a href="{{ url_for('profile', user_id=offer.user_id) }}" style="color:#ffd84d; text-decoration:none;">
+  {{ offer.user.email.split('@')[0] }}
+</a>
+  </div>
+
 </div>
 {% endfor %}
 
 {% endblock %}
+
 
 
 

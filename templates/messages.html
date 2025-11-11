@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Chat — The Hive{% endblock %}
+{% block content %}
+
+<h2 style="margin-bottom:16px; text-align:center;">
+  💬 Chat with {{ other.email }}
+</h2>
+
+<div id="chat-box" style="height:60vh; overflow-y:auto; padding:12px; background:#e5e7eb; border-radius:12px;">
+  {% for m in messages %}
+    {% if m.sender_id == session['user_id'] %}
+      <!-- MY MESSAGE (right side) -->
+      <div style="display:flex; justify-content:flex-end; margin:6px 0;">
+        <div style="
+          background:#ffd84d;
+          color:#111;
+          padding:10px 14px;
+          border-radius:18px;
+          max-width:60%;
+          font-size:1rem;
+        ">
+          {{ m.content }}
+        </div>
+      </div>
+    {% else %}
+      <!-- OTHER MESSAGE (left side) -->
+      <div style="display:flex; justify-content:flex-start; margin:6px 0;">
+        <div style="
+          background:white;
+          color:#111;
+          padding:10px 14px;
+          border-radius:18px;
+          max-width:60%;
+          font-size:1rem;
+          border:1px solid #d1d5db;
+        ">
+          {{ m.content }}
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
+</div>
+
+<!-- Message Input -->
+<form method="POST" style="display:flex; gap:8px; margin-top:14px;">
+  <input type="text" name="content" placeholder="Type a message..."
+         style="flex:1; padding:14px; border-radius:14px; border:1px solid #ccc;">
+  <button style="
+    background:#ffd84d;
+    border:none;
+    border-radius:14px;
+    padding:0 20px;
+    font-weight:600;
+    cursor:pointer;
+  ">Send</button>
+</form>
+
+<script>
+  // Scroll to newest message
+  const box = document.getElementById("chat-box");
+  box.scrollTop = box.scrollHeight;
+</script>
+
+{% endblock %}

@@ -1,26 +1,46 @@
 {% extends "base.html" %}
-{% block title %}My Profile — The Hive{% endblock %}
+{% block title %}{{ user.email.split('@')[0] }} — Profile{% endblock %}
 {% block content %}
 
-<h2>My Profile</h2>
+<h2 style="text-transform:capitalize; margin-bottom:10px;">
+  {{ user.email.split('@')[0] }}’s Profile
+</h2>
 
 <p><strong>Email:</strong> {{ user.email }}</p>
 <p><strong>Timebank Balance:</strong> {{ user.timebank_balance }} hours</p>
 
-<h3 style="margin-top:24px;">My Offers</h3>
+<!-- Show logout button only if viewing own profile -->
+{% if session.user_id == user.user_id %}
+  <a href="{{ url_for('logout') }}"
+     class="btn"
+     style="display:inline-block; margin-top:12px; background:#ff6b6b;">
+     Logout
+  </a>
+{% endif %}
+
+<hr style="margin: 24px 0; opacity:0.5;">
+
+<h3>Offers Posted by {{ user.email.split('@')[0] }}</h3>
 
 {% if user.offers %}
-  {% for offer in user.offers %}
-  <div class="offer-card">
-    <strong>{{ offer.title }}</strong><br>
-    {{ offer.hours }} hours — {{ offer.location }}
-    <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">
-      {{ offer.description }}
+  {% set offers_list = offers if offers is defined else user.offers %}
+  {% for offer in offers_list %}
+
+    <div class="offer-card" style="margin-top:14px;">
+      <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}"
+         style="color:#ffd84d; font-weight:600; text-decoration:none;">
+        {{ offer.title }}
+      </a>
+      <br>
+      {{ offer.hours }} hours — {{ offer.location }}
+      <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">
+        {{ offer.description }}
+      </div>
     </div>
-  </div>
   {% endfor %}
 {% else %}
-  <p class="muted">You haven’t posted any offers yet.</p>
+  <p class="muted">{{ user.email.split('@')[0] }} has not posted any offers yet.</p>
 {% endif %}
 
 {% endblock %}
+
