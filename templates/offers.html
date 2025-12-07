@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Offers — The Hive{% endblock %}
+{% block content %}
+
+<h2 style="margin-bottom:14px;">Community Offers</h2>
+
+{% if offers %}
+  {% for offer in offers %}
+    <div class="offer-card">
+      <span class="type-badge offer">Offer</span>
+
+      <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}" class="offer-title">
+        {{ offer.title }}
+      </a>
+
+      <div class="card-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
+
+      <!-- FAVORITE BUTTON -->
+      <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
+        <button style="background:none; border:none; cursor:pointer; font-size:20px; color:red;">
+          {% if offer.offer_id in user_favorites %}
+            ♥
+          {% else %}
+            ♡
+          {% endif %}
+        </button>
+      </form>
+
+      <div class="small muted">
+        Posted by
+        <a href="{{ url_for('profile', user_id=offer.user_id) }}" style="color:#ffd84d;">
+          {{ offer.user.email.split('@')[0] }}
+        </a>
+      </div>
+
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">No offers posted yet.</p>
+{% endif %}
+
+{% endblock %}

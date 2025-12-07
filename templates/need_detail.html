@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ need.title }} — The Hive{% endblock %}
+{% block content %}
+
+<div class="need-card">
+
+  <!-- FLEX WRAPPER -->
+  <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+
+    <!-- LEFT SIDE -->
+    <div style="flex:1; min-width:240px;">
+
+      <h2 class="need-title">{{ need.title }}</h2>
+
+      <p><strong>Hours:</strong> {{ need.hours }}</p>
+      <p><strong>Location:</strong> {{ need.location }}</p>
+
+      <p style="margin-top:12px;">
+        {{ need.description }}
+      </p>
+
+      <p style="margin-top:18px;">
+        <strong>Requested by:</strong>
+        <a href="{{ url_for('profile', user_id=need.user_id) }}" style="color:#67e8f9;">
+          {{ need.user.email.split("@")[0] }}
+        </a>
+      </p>
+
+      <!-- FAVORITE BUTTON -->
+      <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="margin-top:10px;">
+        <button class="heart-btn" style="background:none; border:none; cursor:pointer; font-size:26px; color:red;">
+          {% if need.need_id in user_need_favorites %}
+            ♥
+          {% else %}
+            ♡
+          {% endif %}
+        </button>
+      </form>
+
+      <!-- MESSAGE BUTTON -->
+      <a href="{{ url_for('chat',
+                    user_id=need.user_id,
+                    listing_id=need.need_id,
+                    type='need') }}"
+   class="btn"
+   style="padding:10px 18px; font-size:0.95rem; background:#22d3ee; color:#0f172a; border-radius:10px; text-decoration:none; display:inline-block; margin-top:14px;">
+    💬 Send Message
+</a>
+
+
+
+    </div>
+
+    <!-- RIGHT: IMAGE -->
+    {% if need.image_filename %}
+    <div style="flex:0 0 260px;">
+      <img src="{{ url_for('static', filename='uploads/' ~ need.image_filename) }}"
+           style="width:100%; border-radius:10px;">
+    </div>
+    {% endif %}
+
+  </div>
+
+  <hr style="margin: 24px 0; opacity:0.5;">
+
+  <!-- MAP SECTION -->
+  <h3 style="margin-top:15px;">Location on Map</h3>
+  <div id="map" style="height:380px; border-radius:10px; margin-top:10px;"></div>
+
+</div>
+
+<!-- LEAFLET MAP -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+  const lat = {{ need.latitude|default("null") }};
+  const lon = {{ need.longitude|default("null") }};
+
+  if (lat && lon) {
+    const map = L.map('map').setView([lat, lon], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+
+    L.marker([lat, lon]).addTo(map)
+      .bindPopup("{{ need.location }}")
+      .openPopup();
+  } else {
+    document.getElementById('map').innerHTML = "📍 Location not available.";
+    document.getElementById('map').style.textAlign = "center";
+    document.getElementById('map').style.padding = "40px";
+  }
+</script>
+
+{% endblock %}

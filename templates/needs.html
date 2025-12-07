@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Needs — The Hive{% endblock %}
+{% block content %}
+
+<h2 style="margin-bottom:14px;">Community Needs</h2>
+
+{% if needs %}
+  {% for need in needs %}
+    <div class="need-card">
+
+      <!-- Badge -->
+      <span class="type-badge need">Need</span>
+
+      <!-- Title -->
+      <a href="{{ url_for('need_detail', need_id=need.need_id) }}" class="need-title">
+        {{ need.title }}
+      </a>
+
+      <!-- Meta -->
+      <div class="card-meta">{{ need.hours }} hours — {{ need.location }}</div>
+
+      <!-- FAVORITE BUTTON (correct route + correct set name) -->
+      <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">
+        <button class="favorite-btn {% if need.need_id in user_need_favorites %}filled{% endif %}">
+          {% if need.need_id in user_need_favorites %}
+            ♥
+          {% else %}
+            ♡
+          {% endif %}
+        </button>
+      </form>
+
+      <!-- Description -->
+      <div style="margin-bottom:10px;">{{ need.description }}</div>
+
+      <!-- Posted By -->
+      <div class="small muted">
+        Requested by
+        <a href="{{ url_for('profile', user_id=need.user_id) }}"
+           style="color:#67e8f9; text-decoration:none;">
+          {{ need.user.email.split('@')[0] }}
+        </a>
+      </div>
+
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">No needs have been posted yet.</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Favorites — The Hive{% endblock %}
+{% block content %}
+
+<h2 style="margin-bottom:18px;">Your Favorites</h2>
+
+<!-- ====================================================== -->
+<!-- FAVORITE OFFERS -->
+<!-- ====================================================== -->
+<h3 style="margin-top:10px;">Favorite Offers</h3>
+
+{% if favorite_offers %}
+  {% for offer in favorite_offers %}
+    <div class="offer-card">
+      <span class="type-badge offer">Offer</span>
+
+      <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}" class="offer-title">
+        {{ offer.title }}
+      </a>
+
+      <div class="card-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
+
+      <!-- UNFAV BUTTON -->
+      <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
+        <button style="background:none;border:none;color:red;font-size:20px;cursor:pointer;">
+          ♥
+        </button>
+      </form>
+
+      <div class="small muted">
+        Posted by
+        <a href="{{ url_for('profile', user_id=offer.user_id) }}" style="color:#ffd84d;">
+          {{ offer.user.email.split('@')[0] }}
+        </a>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">No favorite offers yet.</p>
+{% endif %}
+
+<!-- ====================================================== -->
+<!-- FAVORITE NEEDS -->
+<!-- ====================================================== -->
+<h3 style="margin-top:22px;">Favorite Needs</h3>
+
+{% if favorite_needs %}
+  {% for need in favorite_needs %}
+    <div class="need-card">
+      <span class="type-badge need">Need</span>
+
+      <a href="{{ url_for('need_detail', need_id=need.need_id) }}" class="need-title">
+        {{ need.title }}
+      </a>
+
+      <div class="card-meta">{{ need.hours }} hours — {{ need.location }}</div>
+
+      <!-- UNFAV BUTTON -->
+      <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">
+        <button style="background:none;border:none;color:red;font-size:20px;cursor:pointer;">
+          ♥
+        </button>
+      </form>
+
+      <div class="small muted">
+        Requested by
+        <a href="{{ url_for('profile', user_id=need.user_id) }}" style="color:#67e8f9;">
+          {{ need.user.email.split('@')[0] }}
+        </a>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">No favorite needs yet.</p>
+{% endif %}
+
+{% endblock %}
