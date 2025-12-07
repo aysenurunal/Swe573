@@ -22,6 +22,14 @@ app.secret_key = SECRET_KEY
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
+@app.before_request
+def initialize_database():
+    if not getattr(app, "db_initialized", False):
+        with app.app_context():
+            db.create_all()
+        app.db_initialized = True
+
+
 
 # Resimler buraya kaydedilecek:
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
