@@ -4,69 +4,73 @@
 
 <div class="offer-card">
 
-  <!-- GRID LAYOUT -->
-  <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+  <div style="display:flex; flex-wrap:wrap; gap:24px;">
 
-    <!-- LEFT: TEXT INFO -->
-    <div style="flex:1; min-width:240px;">
-      <h2 class="offer-title">{{ offer.title }}</h2>
+    <!-- LEFT SIDE -->
+    <div style="flex:1; min-width:260px;">
 
+      <!-- Title -->
+      <h2 class="need-title" style="font-size:1.7rem;">{{ offer.title }}</h2>
+
+      <!-- Offer Badge -->
+      <span class="type-badge offer">Offer</span>
+
+      <!-- Meta Info (same style as Need page) -->
       <p><strong>Hours:</strong> {{ offer.hours }}</p>
       <p><strong>Location:</strong> {{ offer.location }}</p>
 
-      <p style="margin-top:12px;">
+      <!-- Description -->
+      <p style="margin-top:10px;">
         {{ offer.description }}
       </p>
 
+      <!-- Offered by -->
       <p style="margin-top:18px;">
-        <strong>Posted by:</strong>
-        <a href="{{ url_for('profile', user_id=offer.user_id) }}" style="color:#ffd84d;">
-          {{ offer.user.username }}
+        <strong>Offered by:</strong>
+        <a href="{{ url_for('profile', user_id=offer.user_id) }}"
+           style="color:#ffd84d; text-decoration:none;">
+          {{ offer.user.email.split('@')[0] }}
         </a>
       </p>
 
-      <div style="margin-top:18px; display:flex; gap:12px; flex-wrap:wrap;">
-
-        <!-- Message Button -->
-      <a href="{{ url_for('chat', user_id=offer.user_id) }}"
-         class="btn"
-         style="padding:10px 18px; font-size:0.95rem; background:#ffd84d; color:black; border-radius:10px; text-decoration:none; display:inline-block; margin:6px 0;">
-        💬 Send Message
-      </a>
+      <!-- Favorite Button (same style as Need) -->
+        <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
+          <button class="favorite-btn {% if offer.offer_id in user_favorites %}filled{% endif %}">
+            {% if offer.offer_id in user_favorites %} ♥ {% else %} ♡ {% endif %}
+          </button>
+        </form>
 
 
-
-        <!-- Hour Offer Button -->
-        {% for h in range(1, offer.hours) %}
-          <form action="#" method="post">
-            <button style="padding:8px 14px; background:#333; border-radius:8px; color:white; border:none; cursor:pointer;">
-              {{ h }} hour offer
-            </button>
-          </form>
-        {% endfor %}
+      <!-- Send Message -->
+      <div style="margin-top:16px;">
+        <a href="{{ url_for('chat', user_id=offer.user_id, listing_id=offer.offer_id, type='offer') }}"
+   class="btn-msg">
+    💬 Send Message
+</a>
 
       </div>
+
     </div>
 
-    <!-- RIGHT: IMAGE -->
+    <!-- RIGHT SIDE (IMAGE) -->
     {% if offer.image_filename %}
-    <div style="flex:0 0 260px;">
-      <img src="{{ url_for('static', filename='uploads/' ~ offer.image_filename) }}"
-           style="width:100%; border-radius:10px;">
-    </div>
+      <div style="flex:0 0 280px;">
+        <img src="{{ url_for('static', filename='uploads/' ~ offer.image_filename) }}"
+             style="width:100%; border-radius:12px;">
+      </div>
     {% endif %}
 
-  </div> <!-- END FLEX -->
+  </div>
 
-  <hr style="margin: 24px 0; opacity:0.5;">
+  <hr style="margin:26px 0; opacity:0.5;">
 
   <!-- MAP SECTION -->
   <h3>Location on Map</h3>
-  <div id="map" style="height:380px; border-radius:10px; margin-top:10px;"></div>
+  <div id="map" style="height:380px; border-radius:12px; margin-top:12px;"></div>
 
 </div>
 
-<!-- LEAFLET MAP -->
+<!-- Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -76,20 +80,20 @@
 
   if (lat && lon) {
     const map = L.map('map').setView([lat, lon], 13);
-
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxZoom: 19
     }).addTo(map);
-
     L.marker([lat, lon]).addTo(map)
       .bindPopup("{{ offer.location }}")
       .openPopup();
   } else {
-    document.getElementById('map').innerHTML = "🔍 Location could not be mapped.";
-    document.getElementById('map').style.textAlign = "center";
-    document.getElementById('map').style.padding = "40px";
+    const mapDiv = document.getElementById('map');
+    mapDiv.innerHTML = "📍 Location not available.";
+    mapDiv.style.textAlign = "center";
+    mapDiv.style.padding = "40px";
   }
 </script>
 
 {% endblock %}
+
 

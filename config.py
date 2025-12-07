@@ -1,5 +1,21 @@
 import os
 
-SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/thehive")
+# Ortamı belirle (default: development)
+ENV = os.getenv("FLASK_ENV", "development")
+
+# DATABASE ----------------------------------------------------
+
+if ENV == "development":
+    # LOCAL ortamda SQLite kullan
+    SQLALCHEMY_DATABASE_URI = "sqlite:///local.db"
+else:
+    # PRODUCTION (DigitalOcean) PostgreSQL kullanır
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        "postgresql://postgres:postgres@db:5432/thehive"
+    )
+
 SQLALCHEMY_TRACK_MODIFICATIONS = False
-SECRET_KEY = "super-secret-key"
+
+# SECRET KEY --------------------------------------------------
+SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key")

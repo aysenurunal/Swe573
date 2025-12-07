@@ -40,8 +40,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     timebank_balance = db.Column(db.Integer, default=3)
     offers = db.relationship("Offer", backref="user", lazy=True)
+    needs = db.relationship("Need", backref="user", lazy=True)
     favorites = db.relationship("Favorite", backref="user", lazy=True)
-
+    need_favorites = db.relationship("NeedFavorite", backref="user", lazy=True)
 
 class Offer(db.Model):
     offer_id = db.Column(db.Integer, primary_key=True)
@@ -55,6 +56,22 @@ class Offer(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
 
+class Need(db.Model):
+    need_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    hours = db.Column(db.Integer, nullable=False)
+    location = db.Column(db.String(120), nullable=True)
+    is_online = db.Column(db.Boolean, default=False)
+    image_filename = db.Column(db.String(255), nullable=True)
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+
+class NeedFavorite(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    need_id = db.Column(db.Integer, db.ForeignKey("need.need_id"), nullable=False)
 
 class Favorite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -67,28 +84,53 @@ class Message(db.Model):
     receiver_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
     content = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-class Proposal(db.Model):
+    listing_id= db.Column(db.Integer, nullable=True)  # İlgili ilan ID'si (opsiyonel)
+    listing_type = db.Column(db.String(10), nullable=False)  # 'offer' veya 'need' (opsiyonel)
+#----------------------DEAL MODEL-----------------------
+class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    offer_id = db.Column(db.Integer, db.ForeignKey("offer.offer_id"), nullable=False)
-    proposer_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+
+    listing_type = db.Column(db.String(10), nullable=False)   # 'offer' or 'need'
+    listing_id = db.Column(db.Integer, nullable=False)
+
+    starter_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+
     hours = db.Column(db.Integer, nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
+
+    starter_confirm = db.Column(db.Boolean, default=False)
+    receiver_confirm = db.Column(db.Boolean, default=False)
+
+    cancel_starter_confirm = db.Column(db.Boolean, default=False)
+    cancel_receiver_confirm = db.Column(db.Boolean, default=False)
+
     status = db.Column(db.String(20), default="pending")
+    # pending → accepted → completed
 
 # ---------- ROUTES ----------
 
 @app.route("/")
 def index():
     offers = Offer.query.all()
+    needs = Need.query.all()
 
     user_favorites = set()
+    user_need_favorites = set()
     if "user_id" in session:
         favs = Favorite.query.filter_by(user_id=session["user_id"]).all()
         user_favorites = {f.offer_id for f in favs}
 
-    return render_template("main.html", offers=offers, user_favorites=user_favorites)
+        need_favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()
+        user_need_favorites = {f.need_id for f in need_favs}
 
-
+    return render_template(
+        "main.html",
+        offers=offers,
+        needs=needs,
+        user_favorites=user_favorites,
+        user_need_favorites=user_need_favorites,
+    )
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -132,6 +174,116 @@ def register():
         return redirect(url_for("login"))
 
     return render_template("register.html")
+
+@app.route("/needs")
+def needs_page():
+    needs = Need.query.all()
+
+    user_need_favorites = set()
+    if "user_id" in session:
+        need_favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()
+        user_need_favorites = {f.need_id for f in need_favs}
+
+    return render_template("needs.html",
+                           needs=needs,
+                           user_need_favorites=user_need_favorites)
+
+@app.route("/offers")
+def offers_page():
+    offers = Offer.query.all()
+
+    # Eğer kullanıcı giriş yaptıysa favorilerini çek
+    user_favorites = set()
+    if "user_id" in session:
+        favs = Favorite.query.filter_by(user_id=session["user_id"]).all()
+        user_favorites = {f.offer_id for f in favs}
+
+    return render_template("offers.html", offers=offers, user_favorites=user_favorites)
+
+@app.route("/favorites")
+def favorites_page():
+    if "user_id" not in session:
+        return redirect("/login")
+
+    user_id = session["user_id"]
+
+    # ⭐ Favori offers
+    fav_offer_ids = {f.offer_id for f in Favorite.query.filter_by(user_id=user_id).all()}
+    favorite_offers = Offer.query.filter(Offer.offer_id.in_(fav_offer_ids)).all() if fav_offer_ids else []
+
+    # ⭐ Favori needs
+    fav_need_ids = {f.need_id for f in NeedFavorite.query.filter_by(user_id=user_id).all()}
+    favorite_needs = Need.query.filter(Need.need_id.in_(fav_need_ids)).all() if fav_need_ids else []
+
+    return render_template(
+        "favorites.html",
+        favorite_offers=favorite_offers,
+        favorite_needs=favorite_needs,
+        fav_offer_ids=fav_offer_ids,
+        fav_need_ids=fav_need_ids,
+    )
+
+
+@app.route("/add-need", methods=["GET", "POST"])
+def add_need():
+    if "user_id" not in session:
+        return redirect("/login")
+
+    if request.method == "POST":
+        title = request.form["title"]
+        description = request.form["description"]
+        hours = int(request.form["hours"])
+        location = request.form["location"]
+
+        from geopy.geocoders import Nominatim
+        from geopy.exc import GeocoderTimedOut
+        import time
+
+        geolocator = Nominatim(user_agent="the-hive", timeout=10)
+
+        def safe_geocode(address, attempts=3):
+            for _ in range(attempts):
+                try:
+                    return geolocator.geocode(address)
+                except GeocoderTimedOut:
+                    time.sleep(1)
+            return None
+
+        loc = safe_geocode(location)
+        lat = loc.latitude if loc else None
+        lon = loc.longitude if loc else None
+
+        image_filename = None
+        file = request.files.get("image")
+
+        if file and file.filename:
+            if allowed_file(file.filename):
+                safe_name = secure_filename(file.filename)
+                safe_name = f"user{session['user_id']}_{safe_name}"
+                save_path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
+                file.save(save_path)
+                image_filename = safe_name
+            else:
+                return "Unsupported file type. Allowed: png, jpg, jpeg, gif", 400
+
+        need = Need(
+            user_id=session["user_id"],
+            title=title,
+            description=description,
+            hours=hours,
+            location=location,
+            is_online=("online" in location.lower()),
+            image_filename=image_filename,
+            latitude=lat,
+            longitude=lon,
+        )
+
+        db.session.add(need)
+        db.session.commit()
+
+        return redirect(url_for("index"))
+
+    return render_template("add_need.html")
 
 @app.route("/add-offer", methods=["GET", "POST"])
 def add_offer():
@@ -204,7 +356,16 @@ def my_profile():
         return redirect("/login")
 
     user = User.query.get(session["user_id"])
-    return render_template("profile.html", user=user)
+
+    # Kullanıcı DB’de yoksa → session’ı temizle ve login’e gönder
+    if user is None:
+        session.clear()
+        return redirect("/login")
+
+    user_offers = Offer.query.filter_by(user_id=user.user_id).all()
+
+    return render_template("profile.html", user=user, offers=user_offers)
+
 
 @app.route("/user/<int:user_id>")
 def profile(user_id):
@@ -225,7 +386,22 @@ def toggle_favorite(offer_id):
         db.session.add(Favorite(user_id=session["user_id"], offer_id=offer_id))
 
     db.session.commit()
-    return redirect("/")
+    return redirect(request.referrer or "/")
+
+@app.route("/toggle-need-favorite/<int:need_id>", methods=["POST"])
+def toggle_need_favorite(need_id):
+    if "user_id" not in session:
+        return redirect("/login")
+
+    fav = NeedFavorite.query.filter_by(user_id=session["user_id"], need_id=need_id).first()
+
+    if fav:
+        db.session.delete(fav)
+    else:
+        db.session.add(NeedFavorite(user_id=session["user_id"], need_id=need_id))
+
+    db.session.commit()
+    return redirect(request.referrer or "/")
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
@@ -234,8 +410,32 @@ def uploaded_file(filename):
 @app.route("/offer/<int:offer_id>")
 def offer_detail(offer_id):
     offer = Offer.query.get_or_404(offer_id)
-    return render_template("offer_detail.html", offer=offer)
 
+    user_favorites = set()
+    if "user_id" in session:
+        favs = Favorite.query.filter_by(user_id=session["user_id"]).all()
+        user_favorites = {f.offer_id for f in favs}
+
+    return render_template(
+        "offer_detail.html",
+        offer=offer,
+        user_favorites=user_favorites
+    )
+
+@app.route("/need/<int:need_id>")
+def need_detail(need_id):
+    need = Need.query.get_or_404(need_id)
+
+    user_need_favorites = set()
+    if "user_id" in session:
+        favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()
+        user_need_favorites = {f.need_id for f in favs}
+
+    return render_template(
+        "need_detail.html",
+        need=need,
+        user_need_favorites=user_need_favorites
+    )
 
 @app.route("/logout")
 def logout():
@@ -272,60 +472,116 @@ def send_message(to_user_id):
 
     return render_template("messages.html", messages=chat_messages, other=receiver)
 
+# -------------------- CHAT SYSTEM --------------------
+
 @app.route("/chat/<int:user_id>", methods=["GET", "POST"])
 def chat(user_id):
     if "user_id" not in session:
         return redirect("/login")
 
-    user1 = session["user_id"]   # Sen
-    user2 = user_id              # Görüştüğün kişi
+    user1 = session["user_id"]
+    user2 = user_id
+
+    # -------------------- LISTING INFO --------------------
+    listing_id = request.args.get("listing_id")
+    listing_type = request.args.get("type")
+
+    if listing_id:
+        session["active_listing_id"] = listing_id
+        session["active_listing_type"] = listing_type
 
     other_user = User.query.get_or_404(user2)
 
-    # Mesaj gönderme
+    # -------------------- LISTING SUMMARY --------------------
+    listing_data = None
+
+    listing_id = session.get("active_listing_id")
+    listing_type = session.get("active_listing_type")
+
+    if listing_id and listing_type:
+        if listing_type == "offer":
+            listing = Offer.query.get(listing_id)
+        else:
+            listing = Need.query.get(listing_id)
+
+        if listing:
+            listing_data = {
+                "type": listing_type,
+                "title": listing.title,
+                "hours": listing.hours,
+                "location": listing.location,
+                "id": listing_id
+            }
+
+    # -------------------- SEND MESSAGE --------------------
     if request.method == "POST":
         text = request.form["message"].strip()
         if text:
-            msg = Message(sender_id=user1, receiver_id=user2, content=text)
+            msg = Message(
+                sender_id=user1,
+                receiver_id=user2,
+                content=text,
+                listing_id=session.get("active_listing_id"),
+                listing_type=session.get("active_listing_type")
+            )
+
             db.session.add(msg)
             db.session.commit()
         return redirect(url_for("chat", user_id=user2))
 
-    # Sohbet geçmişini çek
+    # -------------------- GET ALL MESSAGES --------------------
     messages = Message.query.filter(
         ((Message.sender_id == user1) & (Message.receiver_id == user2)) |
         ((Message.sender_id == user2) & (Message.receiver_id == user1))
-    ).order_by(Message.timestamp.asc()).all()
+        &
+        (Message.listing_id == session.get("active_listing_id"))
+        &
+        (Message.listing_type == session.get("active_listing_type"))
+    ).all()
 
-    return render_template("chat.html", other_user=other_user, messages=messages)
+    # -------------------- GET ALL DEALS --------------------
+    deals = Transaction.query.filter(
+        (
+                ((Transaction.starter_id == user1) & (Transaction.receiver_id == user2)) |
+                ((Transaction.starter_id == user2) & (Transaction.receiver_id == user1))
+        ) &
+        (Transaction.listing_id == session.get("active_listing_id"))
+    ).all()
+
+    # -------------------- BUILD TIMELINE --------------------
+    timeline = []
+
+    for m in messages:
+        timeline.append({
+            "type": "message",
+            "timestamp": m.timestamp,
+            "sender_id": m.sender_id,
+            "content": m.content
+        })
+
+    for d in deals:
+        timeline.append({
+            "type": "deal",
+            "timestamp": d.date,  # deal'ın gerçekleşme zamanı
+            "deal": d
+        })
+
+    # 🔥 Hepsini zaman sırasına göre sırala
+    timeline.sort(key=lambda x: x["timestamp"])
+
+    # -------------------- ACTIVE ACCEPTED DEAL --------------------
+    active_deal = next((d for d in deals if d.status == "accepted"), None)
+
+    return render_template(
+        "chat.html",
+        other_user=other_user,
+        timeline=timeline,
+        active_deal=active_deal,
+        listing_data=listing_data
+    )
 
 
 
-@app.route("/chat/<int:offer_id>", methods=["GET", "POST"])
-def start_chat(offer_id):
-    if "user_id" not in session:
-        return redirect("/login")
-
-    offer = Offer.query.get_or_404(offer_id)
-    sender_id = session["user_id"]
-    receiver_id = offer.user_id
-
-    # GET → Mesajları göster
-    if request.method == "GET":
-        messages = Message.query.filter(
-            ((Message.sender_id==sender_id) & (Message.receiver_id==receiver_id)) |
-            ((Message.sender_id==receiver_id) & (Message.receiver_id==sender_id))
-        ).order_by(Message.timestamp).all()
-
-        return render_template("chat.html", messages=messages, receiver=offer.user)
-
-    # POST → Mesaj gönder
-    if request.method == "POST":
-        text = request.form["text"]
-        msg = Message(sender_id=sender_id, receiver_id=receiver_id, text=text)
-        db.session.add(msg)
-        db.session.commit()
-        return redirect(url_for("start_chat", offer_id=offer_id))
 
 @app.route("/messages")
 def messages_list():
@@ -352,17 +608,189 @@ def messages_list():
 
     return render_template("messages_list.html", conversations=conversations)
 
-
-@app.route("/proposal/<int:offer_id>", methods=["POST"])
-def make_proposal(offer_id):
+@app.route("/deal/start/<int:other_id>", methods=["POST"])
+def start_deal(other_id):
     if "user_id" not in session:
         return redirect("/login")
 
+    starter = User.query.get(session["user_id"])
+    receiver = User.query.get(other_id)
+
+    # ---------------------------
+    # 1) Formdan gelen hour ve date + (opsiyonel saat)
+    # ---------------------------
     hours = int(request.form["hours"])
-    proposal = Proposal(offer_id=offer_id, proposer_id=session["user_id"], hours=hours)
-    db.session.add(proposal)
+
+    date_str = request.form["date"]     # "2025-12-06"
+    time_str = request.form.get("time") # "14:30" olabilir veya None
+
+    # Saat varsa birleştir → datetime objesi oluştur
+    if time_str:
+        date = datetime.strptime(date_str + " " + time_str, "%Y-%m-%d %H:%M")
+    else:
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+
+    # ---------------------------
+    # 2) Chat içinde set edilmiş listing bilgisi
+    # ---------------------------
+    listing_id = session.get("active_listing_id")
+    listing_type = session.get("active_listing_type")   # "offer" veya "need"
+
+    # Güvenlik: listing bilgisi gelmemişse hata verme → chat’e dön
+    if not listing_id or not listing_type:
+        return redirect(url_for("chat", user_id=other_id))
+
+    # ---------------------------
+    # 3) Transaction nesnesi oluştur
+    # ---------------------------
+    t = Transaction(
+        listing_type=listing_type,
+        listing_id=listing_id,
+        starter_id=starter.user_id,
+        receiver_id=receiver.user_id,
+        hours=hours,
+        date=date,
+        status="pending"
+    )
+
+    db.session.add(t)
     db.session.commit()
-    return redirect(url_for("offer_detail", offer_id=offer_id))
+
+    # ---------------------------
+    # 4) Mesaj ekranına doğru şekilde geri dön
+    # ---------------------------
+    return redirect(url_for("chat", user_id=receiver.user_id, deal_id=t.id))
+
+@app.route("/deal/accept/<int:deal_id>", methods=["POST"])
+def accept_deal(deal_id):
+    deal = Transaction.query.get_or_404(deal_id)
+
+    # sadece receiver kabul edebilir
+    if session["user_id"] != deal.receiver_id:
+        return redirect(url_for("chat", user_id=deal.starter_id))
+
+    # ----------------- 1) Bu iki user arasındaki eski accepted deal'ları iptal et -----------------
+    old_accepted = Transaction.query.filter(
+        ((Transaction.starter_id == deal.starter_id) & (Transaction.receiver_id == deal.receiver_id)) |
+        ((Transaction.starter_id == deal.receiver_id) & (Transaction.receiver_id == deal.starter_id))
+    ).filter_by(status="accepted").all()
+
+    for d in old_accepted:
+        d.status = "cancelled"
+
+    # ----------------- 2) Bu deal accepted olur -----------------
+    deal.receiver_confirm = True
+    deal.status = "accepted"
+
+    db.session.commit()
+
+    # redirect chat
+    uid = session["user_id"]
+    other = deal.starter_id if uid == deal.receiver_id else deal.receiver_id
+    return redirect(url_for("chat", user_id=other))
+
+@app.route("/deal/complete/<int:deal_id>", methods=["POST"])
+def complete_deal(deal_id):
+    if "user_id" not in session:
+        return redirect("/login")
+
+    uid = session["user_id"]
+    deal = Transaction.query.get_or_404(deal_id)
+
+    # Only accepted deals can move into completion
+    if deal.status != "accepted":
+        other = deal.receiver_id if uid == deal.starter_id else deal.starter_id
+        return redirect(url_for("chat", user_id=other))
+
+    # Mark user's completion confirmation
+    if uid == deal.starter_id:
+        deal.starter_confirm = True
+    elif uid == deal.receiver_id:
+        deal.receiver_confirm = True
+    else:
+        # Not part of the deal — block it
+        other = deal.receiver_id if uid == deal.starter_id else deal.starter_id
+        return redirect(url_for("chat", user_id=other))
+
+    # If BOTH confirmed → complete!
+    if deal.starter_confirm and deal.receiver_confirm:
+        deal.status = "completed"
+        apply_timebank_transfer(deal)
+
+    db.session.commit()
+
+    # Redirect to the chat with the other user
+    other_user = deal.receiver_id if uid == deal.starter_id else deal.starter_id
+    return redirect(url_for("chat", user_id=other_user))
+
+@app.route("/deal/cancel_request/<int:deal_id>", methods=["POST"])
+def cancel_request(deal_id):
+    deal = Transaction.query.get_or_404(deal_id)
+    uid = session["user_id"]
+
+    deal.status = "cancel_pending"
+
+    if uid == deal.starter_id:
+        deal.cancel_starter_confirm = True
+    else:
+        deal.cancel_receiver_confirm = True
+
+    db.session.commit()
+
+    other = deal.receiver_id if uid == deal.starter_id else deal.starter_id
+    return redirect(url_for("chat", user_id=other))
+
+@app.route("/deal/cancel_confirm/<int:deal_id>", methods=["POST"])
+def cancel_confirm(deal_id):
+    deal = Transaction.query.get_or_404(deal_id)
+    uid = session["user_id"]
+
+    if uid == deal.starter_id:
+        deal.cancel_starter_confirm = True
+    else:
+        deal.cancel_receiver_confirm = True
+
+    # Eğer iki taraf da cancel'ı kabul ettiyse → deal iptal
+    if deal.cancel_starter_confirm and deal.cancel_receiver_confirm:
+        deal.status = "cancelled"
+
+    db.session.commit()
+
+    other = deal.receiver_id if uid == deal.starter_id else deal.starter_id
+    return redirect(url_for("chat", user_id=other))
+
+
+def apply_timebank_transfer(deal):
+    # 1) İlan sahibini bul
+    if deal.listing_type == "need":
+        listing_owner_id = Need.query.get(deal.listing_id).user_id
+    else:  # "offer"
+        listing_owner_id = Offer.query.get(deal.listing_id).user_id
+
+    # 2) Diğer kullanıcıyı bul (starter veya receiver'dan ilan sahibi olmayan)
+    other_user_id = (
+        deal.receiver_id if deal.receiver_id != listing_owner_id else deal.starter_id
+    )
+
+    listing_owner = User.query.get(listing_owner_id)
+    other_user = User.query.get(other_user_id)
+
+    # 3) Kim öder, kim kazanır?
+    if deal.listing_type == "need":
+        # Need ilanı: need sahibi (listing_owner) saat verir
+        payer = listing_owner
+        earner = other_user
+    else:
+        # Offer ilanı: offer sahibi (listing_owner) saat kazanır
+        payer = other_user
+        earner = listing_owner
+
+    # 4) Bakiyeleri güncelle
+    payer.timebank_balance -= deal.hours
+    earner.timebank_balance += deal.hours
+
+    db.session.commit()
+
 
 
 if __name__ == "__main__":

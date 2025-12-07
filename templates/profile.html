@@ -10,7 +10,8 @@
 <p><strong>Timebank Balance:</strong> {{ user.timebank_balance }} hours</p>
 
 <!-- Show logout button only if viewing own profile -->
-{% if session.user_id == user.user_id %}
+{% if session.get('user_id') == user.user_id %}
+
   <a href="{{ url_for('logout') }}"
      class="btn"
      style="display:inline-block; margin-top:12px; background:#ff6b6b;">
@@ -40,6 +41,27 @@
   {% endfor %}
 {% else %}
   <p class="muted">{{ user.email.split('@')[0] }} has not posted any offers yet.</p>
+{% endif %}
+
+<h3 style="margin-top:20px;">Needs Posted by {{ user.email.split('@')[0] }}</h3>
+
+{% if user.needs %}
+  {% for need in user.needs %}
+
+    <div class="offer-card" style="margin-top:14px;">
+      <a href="{{ url_for('need_detail', need_id=need.need_id) }}"
+         style="color:#ffd84d; font-weight:600; text-decoration:none;">
+        {{ need.title }}
+      </a>
+      <br>
+      {{ need.hours }} hours — {{ need.location }}
+      <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">
+        {{ need.description }}
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">{{ user.email.split('@')[0] }} has not posted any needs yet.</p>
 {% endif %}
 
 {% endblock %}
