@@ -36,7 +36,7 @@
       <!-- Posted By -->
       <div class="small muted">
         Requested by
-        <a href="{{ url_for('profile', user_id=need.user_id) }}"
+        <a href="{{ url_for('view_profile', user_id=need.user_id) }}"
            style="color:#67e8f9; text-decoration:none;">
           {{ need.user.email.split('@')[0] }}
         </a>

@@ -28,7 +28,7 @@
 
       <div class="small muted">
         Posted by
-        <a href="{{ url_for('profile', user_id=offer.user_id) }}" style="color:#ffd84d;">
+        <a href="{{ url_for('view_profile', user_id=offer.user_id) }}" style="color:#ffd84d;">
           {{ offer.user.email.split('@')[0] }}
         </a>
       </div>

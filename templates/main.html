@@ -36,7 +36,7 @@
 
     <div class="small muted">
       Posted by
-      <a href="{{ url_for('profile', user_id=offer.user_id) }}"
+      <a href="{{ url_for('view_profile', user_id=offer.user_id) }}"
          style="color:#ffd84d; text-decoration:none;">
         {{ offer.user.email.split('@')[0] }}
       </a>
@@ -80,7 +80,7 @@
   <!-- User -->
   <div class="small muted">
     Need posted by
-    <a href="{{ url_for('profile', user_id=need.user_id) }}"
+    <a href="{{ url_for('view_profile', user_id=need.user_id) }}"
        style="color:#67e8f9; text-decoration:none;">
        {{ need.user.email.split('@')[0] }}
     </a>

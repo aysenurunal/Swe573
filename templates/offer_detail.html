@@ -6,49 +6,103 @@
 
   <div style="display:flex; flex-wrap:wrap; gap:24px;">
 
-    <!-- LEFT SIDE -->
+    <!-- LEFT SIDE (INFO) -->
     <div style="flex:1; min-width:260px;">
 
       <!-- Title -->
-      <h2 class="need-title" style="font-size:1.7rem;">{{ offer.title }}</h2>
+      <h2 class="offer-title">{{ offer.title }}</h2>
 
       <!-- Offer Badge -->
       <span class="type-badge offer">Offer</span>
 
-      <!-- Meta Info (same style as Need page) -->
-      <p><strong>Hours:</strong> {{ offer.hours }}</p>
-      <p><strong>Location:</strong> {{ offer.location }}</p>
+      <!-- Meta Information -->
+      <div class="card-meta">
+        <strong>Hours:</strong> {{ offer.hours }}
+        <br>
+        <strong>Location:</strong> {{ offer.location }}
+      </div>
+
+      <!-- Favorite Button -->
+      <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
+        <button class="favorite-btn {% if offer.offer_id in user_favorites %}filled{% endif %}">
+          {% if offer.offer_id in user_favorites %} ♥ {% else %} ♡ {% endif %}
+        </button>
+      </form>
 
       <!-- Description -->
-      <p style="margin-top:10px;">
+      <p style="margin-top:12px; line-height:1.55;">
         {{ offer.description }}
       </p>
 
-      <!-- Offered by -->
-      <p style="margin-top:18px;">
-        <strong>Offered by:</strong>
-        <a href="{{ url_for('profile', user_id=offer.user_id) }}"
-           style="color:#ffd84d; text-decoration:none;">
-          {{ offer.user.email.split('@')[0] }}
-        </a>
-      </p>
-
-      <!-- Favorite Button (same style as Need) -->
-        <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
-          <button class="favorite-btn {% if offer.offer_id in user_favorites %}filled{% endif %}">
-            {% if offer.offer_id in user_favorites %} ♥ {% else %} ♡ {% endif %}
-          </button>
-        </form>
+      <!-- Posted By -->
+<p style="margin-top:18px;">
+  <strong>Offered by:</strong>
+  <a href="{{ url_for('view_profile', user_id=offer.user_id) }}"
+     style="color:#ffd84d; text-decoration:none;">
+    {{ offer.user.email.split('@')[0] }}
+  </a>
+</p>
 
 
-      <!-- Send Message -->
-      <div style="margin-top:16px;">
-        <a href="{{ url_for('chat', user_id=offer.user_id, listing_id=offer.offer_id, type='offer') }}"
-   class="btn-msg">
-    💬 Send Message
+      <!-- MESSAGE BUTTON -->
+      <a href="{{ url_for('chat',
+                    user_id=offer.user_id,
+                    listing_id=offer.offer_id,
+                    type='offer') }}"
+         class="btn"
+         style="padding:10px 18px;
+                font-size:0.95rem;
+                background:#ffd84d;
+                color:#111;
+                border-radius:10px;
+                text-decoration:none;
+                display:inline-block;
+                margin-top:14px;">
+        💬 Send Message
+      </a>
+
+      <!-- OWNER-ONLY EDIT & DELETE BUTTONS -->
+      {% if session.get('user_id') == offer.user_id %}
+        {% if not offer.completed %}
+        <div style="margin-top:14px; display:flex; gap:12px;">
+
+          <!-- EDIT BUTTON -->
+<a href="{{ url_for('edit_offer', offer_id=offer.offer_id) }}"
+   style="
+      padding:10px 16px;
+      background:#60a5fa;
+      color:white;
+      border-radius:8px;
+      font-weight:600;
+      text-decoration:none;
+      display:inline-block;
+      margin-right:8px;
+   ">
+  ✏️ Edit Offer
 </a>
 
-      </div>
+<!-- DELETE BUTTON -->
+<form action="{{ url_for('delete_offer', offer_id=offer.offer_id) }}"
+      method="POST"
+      style="display:inline;">
+  <button type="submit"
+          style="
+            padding:10px 16px;
+            background:#ef4444;
+            color:white;
+            border-radius:8px;
+            font-weight:600;
+            border:none;
+            cursor:pointer;
+          ">
+    🗑️ Delete
+  </button>
+</form>
+
+
+        </div>
+        {% endif %}
+      {% endif %}
 
     </div>
 
@@ -62,6 +116,7 @@
 
   </div>
 
+  <!-- DIVIDER -->
   <hr style="margin:26px 0; opacity:0.5;">
 
   <!-- MAP SECTION -->
@@ -70,7 +125,7 @@
 
 </div>
 
-<!-- Leaflet -->
+<!-- Leaflet Scripts -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -80,9 +135,11 @@
 
   if (lat && lon) {
     const map = L.map('map').setView([lat, lon], 13);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19
     }).addTo(map);
+
     L.marker([lat, lon]).addTo(map)
       .bindPopup("{{ offer.location }}")
       .openPopup();
@@ -95,5 +152,3 @@
 </script>
 
 {% endblock %}
-
-

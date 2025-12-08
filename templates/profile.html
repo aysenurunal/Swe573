@@ -1,68 +1,155 @@
 {% extends "base.html" %}
-{% block title %}{{ user.email.split('@')[0] }} — Profile{% endblock %}
+{% block title %}{{ user.email.split("@")[0] }} — Profile{% endblock %}
 {% block content %}
 
-<h2 style="text-transform:capitalize; margin-bottom:10px;">
-  {{ user.email.split('@')[0] }}’s Profile
-</h2>
+{% if session.get("user_id") == user.user_id %}
+  <p><b>Email:</b> {{ user.email }}</p>
+{% endif %}
 
-<p><strong>Email:</strong> {{ user.email }}</p>
 <p><strong>Timebank Balance:</strong> {{ user.timebank_balance }} hours</p>
 
-<!-- Show logout button only if viewing own profile -->
-{% if session.get('user_id') == user.user_id %}
-
-  <a href="{{ url_for('logout') }}"
-     class="btn"
-     style="display:inline-block; margin-top:12px; background:#ff6b6b;">
-     Logout
-  </a>
+{% if session.get("user_id") == user.user_id %}
+  <a href="{{ url_for('logout') }}" style="color:#f43f5e; font-weight:600;">Logout</a>
 {% endif %}
 
-<hr style="margin: 24px 0; opacity:0.5;">
+<!-- ---------------- TAB BUTTONS ---------------- -->
+<div class="tab-buttons">
+  <button class="tab-btn active" onclick="showTab('active')">ACTIVE POSTS</button>
+  <button class="tab-btn" onclick="showTab('completed')">COMPLETED POSTS</button>
+</div>
 
-<h3>Offers Posted by {{ user.email.split('@')[0] }}</h3>
+<hr>
 
-{% if user.offers %}
-  {% set offers_list = offers if offers is defined else user.offers %}
-  {% for offer in offers_list %}
+<!-- ---------------- ACTIVE POSTS TAB ---------------- -->
+<div id="tab-active" class="tab-content">
 
-    <div class="offer-card" style="margin-top:14px;">
-      <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}"
-         style="color:#ffd84d; font-weight:600; text-decoration:none;">
-        {{ offer.title }}
+  <h3>Active Offers</h3>
+  {% if active_offers %}
+    {% for offer in active_offers %}
+      <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}" class="post-card">
+        <div class="post-title">{{ offer.title }}</div>
+        <div class="post-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
       </a>
-      <br>
-      {{ offer.hours }} hours — {{ offer.location }}
-      <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">
-        {{ offer.description }}
-      </div>
-    </div>
-  {% endfor %}
-{% else %}
-  <p class="muted">{{ user.email.split('@')[0] }} has not posted any offers yet.</p>
-{% endif %}
+    {% endfor %}
+  {% else %}
+    <p>No active offers.</p>
+  {% endif %}
 
-<h3 style="margin-top:20px;">Needs Posted by {{ user.email.split('@')[0] }}</h3>
-
-{% if user.needs %}
-  {% for need in user.needs %}
-
-    <div class="offer-card" style="margin-top:14px;">
-      <a href="{{ url_for('need_detail', need_id=need.need_id) }}"
-         style="color:#ffd84d; font-weight:600; text-decoration:none;">
-        {{ need.title }}
+  <h3 style="margin-top:25px;">Active Needs</h3>
+  {% if active_needs %}
+    {% for need in active_needs %}
+      <a href="{{ url_for('need_detail', need_id=need.need_id) }}" class="post-card">
+        <div class="post-title">{{ need.title }}</div>
+        <div class="post-meta">{{ need.hours }} hours — {{ need.location }}</div>
       </a>
-      <br>
-      {{ need.hours }} hours — {{ need.location }}
-      <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">
-        {{ need.description }}
+    {% endfor %}
+  {% else %}
+    <p>No active needs.</p>
+  {% endif %}
+
+</div>
+
+<!-- ---------------- COMPLETED POSTS TAB ---------------- -->
+<div id="tab-completed" class="tab-content" style="display:none;">
+
+  <h3>Completed Offers</h3>
+  {% if completed_offers %}
+    {% for offer in completed_offers %}
+      <div class="post-card completed">
+        <div class="post-title">{{ offer.title }}</div>
+        <div class="post-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
       </div>
-    </div>
-  {% endfor %}
-{% else %}
-  <p class="muted">{{ user.email.split('@')[0] }} has not posted any needs yet.</p>
-{% endif %}
+    {% endfor %}
+  {% else %}
+    <p>No completed offers.</p>
+  {% endif %}
+
+  <h3 style="margin-top:25px;">Completed Needs</h3>
+  {% if completed_needs %}
+    {% for need in completed_needs %}
+      <div class="post-card completed">
+        <div class="post-title">{{ need.title }}</div>
+        <div class="post-meta">{{ need.hours }} hours — {{ need.location }}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No completed needs.</p>
+  {% endif %}
+
+</div>
+
+<!-- -------------- CSS -------------- -->
+<style>
+.tab-buttons {
+  display:flex;
+  justify-content:center;
+  gap:40px;
+  margin-bottom:10px;
+}
+
+.tab-btn {
+  background:none;
+  border:none;
+  font-size:15px;
+  font-weight:600;
+  padding:8px 16px;
+  cursor:pointer;
+  color:#555;
+  border-bottom:2px solid transparent;
+}
+
+.tab-btn.active {
+  color:#facc15;
+  border-bottom-color:#facc15;
+}
+
+.post-card {
+  display:block;
+  background:#111827;
+  padding:16px;
+  border-radius:12px;
+  margin:12px 0;
+  text-decoration:none;
+  color:white;
+}
+
+.post-card.completed {
+  background:#1f2937;
+  opacity:0.8;
+}
+
+.post-title {
+  font-size:18px;
+  font-weight:600;
+  color:#facc15;
+}
+
+.post-meta {
+  font-size:14px;
+  opacity:0.8;
+  margin-top:4px;
+}
+</style>
+
+<!-- -------------- JAVASCRIPT TABS -------------- -->
+<script>
+function showTab(tab) {
+  // Hide both
+  document.getElementById("tab-active").style.display = "none";
+  document.getElementById("tab-completed").style.display = "none";
+
+  // Remove active class
+  document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+
+  // Show selected
+  if (tab === "active") {
+    document.getElementById("tab-active").style.display = "block";
+    document.querySelector(".tab-btn:nth-child(1)").classList.add("active");
+  } else {
+    document.getElementById("tab-completed").style.display = "block";
+    document.querySelector(".tab-btn:nth-child(2)").classList.add("active");
+  }
+}
+</script>
 
 {% endblock %}
-

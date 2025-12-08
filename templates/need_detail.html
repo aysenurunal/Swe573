@@ -21,7 +21,8 @@
 
       <p style="margin-top:18px;">
         <strong>Requested by:</strong>
-        <a href="{{ url_for('profile', user_id=need.user_id) }}" style="color:#67e8f9;">
+        <a href="{{ url_for('my_profile', user_id=need.user_id) }}"
+           style="color:#67e8f9;">
           {{ need.user.email.split("@")[0] }}
         </a>
       </p>
@@ -42,12 +43,57 @@
                     user_id=need.user_id,
                     listing_id=need.need_id,
                     type='need') }}"
-   class="btn"
-   style="padding:10px 18px; font-size:0.95rem; background:#22d3ee; color:#0f172a; border-radius:10px; text-decoration:none; display:inline-block; margin-top:14px;">
-    💬 Send Message
-</a>
+         class="btn"
+         style="padding:10px 18px;
+                font-size:0.95rem;
+                background:#22d3ee;
+                color:#0f172a;
+                border-radius:10px;
+                text-decoration:none;
+                display:inline-block;
+                margin-top:14px;">
+        💬 Send Message
+      </a>
 
+      <!-- OWNER-ONLY EDIT & DELETE BUTTONS -->
+      {% if session.get('user_id') == need.user_id %}
+        {% if not need.completed %}
+        <div style="margin-top:12px; display:flex; gap:10px;">
 
+          <!-- EDIT NEED BUTTON -->
+          <a href="{{ url_for('edit_need', need_id=need.need_id) }}"
+             style="
+                padding:10px 16px;
+                background:#60a5fa;
+                color:white;
+                border-radius:8px;
+                font-weight:600;
+                text-decoration:none;
+                display:inline-block;
+                margin-right:8px;">
+            ✏️ Edit Need
+          </a>
+
+          <!-- DELETE NEED BUTTON -->
+          <form action="{{ url_for('delete_need', need_id=need.need_id) }}"
+                method="POST"
+                style="display:inline;">
+            <button type="submit"
+                    style="
+                      padding:10px 16px;
+                      background:#ef4444;
+                      color:white;
+                      border-radius:8px;
+                      font-weight:600;
+                      border:none;
+                      cursor:pointer;">
+              🗑️ Delete
+            </button>
+          </form>
+
+        </div>
+        {% endif %}
+      {% endif %}
 
     </div>
 
@@ -88,9 +134,10 @@
       .bindPopup("{{ need.location }}")
       .openPopup();
   } else {
-    document.getElementById('map').innerHTML = "📍 Location not available.";
-    document.getElementById('map').style.textAlign = "center";
-    document.getElementById('map').style.padding = "40px";
+    const mapDiv = document.getElementById('map');
+    mapDiv.innerHTML = "📍 Location not available.";
+    mapDiv.style.textAlign = "center";
+    mapDiv.style.padding = "40px";
   }
 </script>
 
