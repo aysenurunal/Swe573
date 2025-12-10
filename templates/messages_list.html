@@ -6,12 +6,15 @@
 
 {% if conversations %}
   {% for c in conversations %}
-    <a href="{{ url_for('chat', user_id=c.user_id) }}"
+    <a href="{{ url_for('chat', user_id=c.other_id, listing_id=c.listing_id, type=c.listing_type) }}"
        style="text-decoration:none; color:#e5e7eb;">
       <div class="offer-card" style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <strong>{{ c.email }}</strong><br>
-          <span style="opacity:.8;">{{ c.last_message }}</span>
+          <span style="opacity:.8;">
+            {% if c.listing_type == 'offer' %}🟡 Offer{% else %}🔵 Need{% endif %}
+            #{{ c.listing_id }} — {{ c.last_message }}
+          </span>
         </div>
         <span style="opacity:.6; font-size:.85rem;">{{ c.last_time }}</span>
       </div>

@@ -580,11 +580,9 @@ def chat(user_id):
     if "user_id" not in session:
         return redirect("/login")
 
-    # 1) Önce me / other:
     me = session["user_id"]
     other = user_id
 
-    # 2) URL’den ilan geldiyse önce onu session’a yaz:
     listing_id_arg = request.args.get("listing_id")
     listing_type_arg = request.args.get("type")
 
@@ -592,7 +590,6 @@ def chat(user_id):
         session["active_listing_id"] = int(listing_id_arg)
         session["active_listing_type"] = listing_type_arg
 
-    # 3) Hâlâ ilan yoksa, son mesaja bakıp otomatik doldur:
     if not session.get("active_listing_id") or not session.get("active_listing_type"):
         last_msg = Message.query.filter(
             (
@@ -608,11 +605,19 @@ def chat(user_id):
         else:
             return "Listing context missing. Open chat from an Offer or Need page."
 
-    # 4) Artık emin şekilde kullanabiliriz:
     listing_id = session["active_listing_id"]
     listing_type = session["active_listing_type"]
 
-    # ----- MESAJ GÖNDERME -----
+    # -------------------- COMPLETED POST KONTROLÜ --------------------
+    if listing_type == "offer":
+        listing = Offer.query.get(listing_id)
+    else:
+        listing = Need.query.get(listing_id)
+
+    if not listing.is_active:
+        return "❌ This post is completed. Chat and deals are no longer available."
+
+    # -------------------- MESAJ GÖNDER --------------------
     if request.method == "POST" and "message" in request.form:
         text = request.form["message"].strip()
         if text:
@@ -625,13 +630,9 @@ def chat(user_id):
             )
             db.session.add(msg)
             db.session.commit()
-        return redirect(url_for("chat", user_id=other))
+        return redirect(url_for("chat", user_id=other,listing_id=listing_id,type=listing_type))
 
-    # ----- İLAN YÜKLE -----
-    listing = Offer.query.get(listing_id) if listing_type == "offer" \
-              else Need.query.get(listing_id)
-
-    # ----- MESAJLAR -----
+    # -------------------- MESAJLARI YÜKLE --------------------
     messages = Message.query.filter(
         (
             ((Message.sender_id == me) & (Message.receiver_id == other)) |
@@ -643,7 +644,7 @@ def chat(user_id):
         (Message.listing_type == listing_type)
     ).order_by(Message.timestamp.asc()).all()
 
-    # ----- DEAL'LER -----
+    # -------------------- DEALS --------------------
     deals = Transaction.query.filter(
         (
             (Transaction.starter_id == me) & (Transaction.receiver_id == other)
@@ -654,9 +655,8 @@ def chat(user_id):
     ).filter(
         Transaction.listing_id == listing_id,
         Transaction.listing_type == listing_type
-    ).order_by(Transaction.date.asc()).all()  # modelinde 'timestamp' yoksa 'date' kullan
+    ).order_by(Transaction.date.asc()).all()
 
-    # timeline
     timeline = []
     for m in messages:
         timeline.append({
@@ -668,22 +668,20 @@ def chat(user_id):
     for d in deals:
         timeline.append({
             "type": "deal",
-            "timestamp": d.date,  # Transaction'da 'date' kolonun varsa
+            "timestamp": d.date,
             "deal": d,
         })
     timeline.sort(key=lambda x: x["timestamp"])
 
     other_user = User.query.get(other)
-    # ---- LISTING SUMMARY DATA ----
-    listing_data = None
-    if listing:
-        listing_data = {
-            "type": listing_type,
-            "title": listing.title,
-            "hours": listing.hours,
-            "location": listing.location,
-            "id": listing_id
-        }
+
+    listing_data = {
+        "type": listing_type,
+        "title": listing.title,
+        "hours": listing.hours,
+        "location": listing.location,
+        "id": listing_id
+    }
 
     return render_template(
         "chat.html",
@@ -704,17 +702,24 @@ def messages_list():
     my_id = session["user_id"]
 
     # Konuştuğum herkesin listesi:
+    other_id = db.case(
+        (Message.sender_id == my_id, Message.receiver_id),
+        else_=Message.sender_id
+    )
     conversations = (
         db.session.query(
-            User.user_id,
+            other_id.label("other_id"),
             User.email,
+            Message.listing_id,
+            Message.listing_type,
             db.func.max(Message.timestamp).label("last_time"),
             db.func.max(Message.content).label("last_message")
         )
-        .join(Message, ((Message.sender_id == User.user_id) | (Message.receiver_id == User.user_id)))
+        .join(User, User.user_id == other_id)
         .filter((Message.sender_id == my_id) | (Message.receiver_id == my_id))
-        .filter(User.user_id != my_id)
-        .group_by(User.user_id, User.email)
+        .filter(Message.listing_id.isnot(None))
+        .filter(Message.listing_type.isnot(None))
+        .group_by(other_id, User.email, Message.listing_id, Message.listing_type)
         .order_by(db.desc("last_time"))
         .all()
     )
@@ -782,8 +787,46 @@ def start_deal(other_id):
     # ---------------------------
     # 5) CHAT’E GERİ DÖN + deal_id PARAMETRESİ EKLİ
     # ---------------------------
-    return redirect(url_for("chat", user_id=receiver.user_id, deal_id=t.id))
+    return redirect(
+        url_for(
+            "chat",
+            user_id=receiver.user_id,
+            deal_id=t.id,
+            listing_id=listing_id,
+            type=listing_type
+        )
+    )
 
+def get_timebank_parties(deal):
+    """Return payer and earner users for the given deal."""
+    if deal.listing_type == "need":
+        listing = Need.query.get(deal.listing_id)
+    else:
+        listing = Offer.query.get(deal.listing_id)
+
+    if not listing:
+        return None, None
+
+    listing_owner_id = listing.user_id
+    other_user_id = deal.receiver_id if deal.receiver_id != listing_owner_id else deal.starter_id
+
+    listing_owner = User.query.get(listing_owner_id)
+    other_user = User.query.get(other_user_id)
+
+    if deal.listing_type == "need":
+        # Need ilanı: need sahibi (listing_owner) saat verir
+        return listing_owner, other_user
+
+    # Offer ilanı: offer sahibi (listing_owner) saat kazanır
+    return other_user, listing_owner
+
+
+def is_timebank_transfer_allowed(deal):
+    payer, earner = get_timebank_parties(deal)
+    if not payer or not earner:
+        return False
+
+    return (payer.timebank_balance - deal.hours >= 0) and (earner.timebank_balance + deal.hours <= 10)
 @app.route("/deal/accept/<int:deal_id>", methods=["POST"])
 def accept_deal(deal_id):
     deal = Transaction.query.get_or_404(deal_id)
@@ -792,6 +835,9 @@ def accept_deal(deal_id):
     if session["user_id"] != deal.receiver_id:
         return redirect(url_for("chat", user_id=deal.starter_id))
 
+    # işlem, timebank limitlerini (min 0, max 10) ihlal ediyorsa kabul etme
+    if not is_timebank_transfer_allowed(deal):
+            return "Transaction cannot be accepted because it exceeds timebank limits."
     # ----------------- 1) Bu iki user arasındaki eski accepted deal'ları iptal et -----------------
     old_accepted = Transaction.query.filter(
         ((Transaction.starter_id == deal.starter_id) & (Transaction.receiver_id == deal.receiver_id)) |
@@ -810,8 +856,14 @@ def accept_deal(deal_id):
     # redirect chat
     uid = session["user_id"]
     other = deal.starter_id if uid == deal.receiver_id else deal.receiver_id
-    return redirect(url_for("chat", user_id=other))
-
+    return redirect(
+        url_for(
+            "chat",
+            user_id=other,
+            listing_id=deal.listing_id,
+            type=deal.listing_type
+        )
+    )
 @app.route("/deal/complete/<int:deal_id>", methods=["POST"])
 def complete_deal(deal_id):
     if "user_id" not in session:
@@ -827,8 +879,14 @@ def complete_deal(deal_id):
     # Sadece accepted deal tamamlanabilir
     if deal.status != "accepted":
         other = deal.receiver_id if uid == deal.starter_id else deal.starter_id
-        return redirect(url_for("chat", user_id=other))
-
+        return redirect(
+            url_for(
+                "chat",
+                user_id=other,
+                listing_id=deal.listing_id,
+                type=deal.listing_type
+            )
+        )
     # Kullanıcı onayını işaretle
     if uid == deal.starter_id:
         deal.starter_confirm = True
@@ -841,6 +899,8 @@ def complete_deal(deal_id):
 
     # ----- İKİ TARAFTA ONAY VARSA TAMAMLA -----
     if both_confirmed and deal.status != "completed":
+        if not is_timebank_transfer_allowed(deal):
+            return "Transaction cannot be completed because it exceeds timebank limits."
         apply_timebank_transfer(deal)
         deal.status = "completed"
 
@@ -875,8 +935,14 @@ def cancel_request(deal_id):
     db.session.commit()
 
     other = deal.receiver_id if uid == deal.starter_id else deal.starter_id
-    return redirect(url_for("chat", user_id=other))
-
+    return redirect(
+        url_for(
+            "chat",
+            user_id=other,
+            listing_id=deal.listing_id,
+            type=deal.listing_type
+        )
+    )
 @app.route("/deal/cancel_confirm/<int:deal_id>", methods=["POST"])
 def cancel_confirm(deal_id):
     deal = Transaction.query.get_or_404(deal_id)
@@ -898,31 +964,8 @@ def cancel_confirm(deal_id):
 
 
 def apply_timebank_transfer(deal):
-    # 1) İlan sahibini bul
-    if deal.listing_type == "need":
-        listing_owner_id = Need.query.get(deal.listing_id).user_id
-    else:  # "offer"
-        listing_owner_id = Offer.query.get(deal.listing_id).user_id
+    payer, earner = get_timebank_parties(deal)
 
-    # 2) Diğer kullanıcıyı bul (starter veya receiver'dan ilan sahibi olmayan)
-    other_user_id = (
-        deal.receiver_id if deal.receiver_id != listing_owner_id else deal.starter_id
-    )
-
-    listing_owner = User.query.get(listing_owner_id)
-    other_user = User.query.get(other_user_id)
-
-    # 3) Kim öder, kim kazanır?
-    if deal.listing_type == "need":
-        # Need ilanı: need sahibi (listing_owner) saat verir
-        payer = listing_owner
-        earner = other_user
-    else:
-        # Offer ilanı: offer sahibi (listing_owner) saat kazanır
-        payer = other_user
-        earner = listing_owner
-
-    # 4) Bakiyeleri güncelle
     payer.timebank_balance -= deal.hours
     earner.timebank_balance += deal.hours
 

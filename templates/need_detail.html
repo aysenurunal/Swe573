@@ -41,8 +41,9 @@
       <!-- MESSAGE BUTTON -->
       <a href="{{ url_for('chat',
                     user_id=need.user_id,
+                    listing_type='need',
                     listing_id=need.need_id,
-                    type='need') }}"
+                    ) }}"
          class="btn"
          style="padding:10px 18px;
                 font-size:0.95rem;
