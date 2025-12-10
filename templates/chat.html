@@ -42,7 +42,9 @@
     {# ---------- MESAJ BALONU ---------- #}
     {% if item.type == "message" %}
       <div class="msg-bubble {% if item.sender_id == session['user_id'] %}me{% else %}them{% endif %}">
-        {{ item.content }}
+        <div class="msg-meta">{{ item.timestamp.strftime("%d.%m.%Y %H:%M") }}</div>
+        <div class="msg-text">{{ item.content }}</div>
+
       </div>
 
     {# ---------- DEAL BALONU ---------- #}
@@ -97,7 +99,9 @@
                                    (session['user_id'] == deal.receiver_id and deal.receiver_confirm) %}
 
             {% if not i_confirmed %}
-              <form action="/deal/complete/{{ deal.id }}" method="post" style="display:inline;">
+              <form action="/deal/complete/{{ deal.id }}" method="post" class="comment-complete-form">
+                <label for="comment-{{ deal.id }}" class="comment-label">Add a comment (max 250 chars) before completing:</label>
+                <textarea name="comment" id="comment-{{ deal.id }}" maxlength="250" required placeholder="Share feedback for {{ other_user.email }}"></textarea>
                 <button class="btn-small success">Confirm Completion</button>
               </form>
             {% else %}
@@ -234,8 +238,18 @@
 }
 
 .msg-bubble.them {
-  background: #E5E5EA;
-  border-bottom-left-radius: 4px;
+    background: #E5E5EA;
+    border-bottom-left-radius: 4px;
+}
+.msg-meta {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.msg-text {
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 
 /* Deal status colors */
@@ -257,6 +271,28 @@
 .deal-body { font-size: 0.9rem; margin-bottom: 8px; }
 .deal-actions { display:flex; gap:6px; flex-wrap:wrap; }
 .deal-note { font-size:0.8rem; opacity:0.85; }
+
+.comment-complete-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.comment-complete-form textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 0.95rem;
+}
+
+.comment-label {
+  font-size: 0.85rem;
+  color: #374151;
+}
 
 /* Small buttons */
 .btn-small {

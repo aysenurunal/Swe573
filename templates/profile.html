@@ -16,6 +16,7 @@
 <div class="tab-buttons">
   <button class="tab-btn active" onclick="showTab('active')">ACTIVE POSTS</button>
   <button class="tab-btn" onclick="showTab('completed')">COMPLETED POSTS</button>
+    <button class="tab-btn" onclick="showTab('comments')">COMMENTS</button>
 </div>
 
 <hr>
@@ -58,6 +59,15 @@
       <div class="post-card completed">
         <div class="post-title">{{ offer.title }}</div>
         <div class="post-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
+          {% set key = 'offer:' ~ offer.offer_id %}
+        {% if listing_comments.get(key) %}
+          {% for comment in listing_comments[key] %}
+            <div class="comment-bubble">
+              <div class="comment-meta">From: {{ comment.from_email }} — on {{ comment.created_at.strftime('%d.%m.%Y') }}</div>
+              <div class="comment-text">“{{ comment.content }}”</div>
+            </div>
+          {% endfor %}
+        {% endif %}
       </div>
     {% endfor %}
   {% else %}
@@ -70,12 +80,40 @@
       <div class="post-card completed">
         <div class="post-title">{{ need.title }}</div>
         <div class="post-meta">{{ need.hours }} hours — {{ need.location }}</div>
+          {% set key = 'need:' ~ need.need_id %}
+        {% if listing_comments.get(key) %}
+          {% for comment in listing_comments[key] %}
+            <div class="comment-bubble">
+              <div class="comment-meta">From: {{ comment.from_email }} — on {{ comment.created_at.strftime('%d.%m.%Y') }}</div>
+              <div class="comment-text">“{{ comment.content }}”</div>
+            </div>
+          {% endfor %}
+        {% endif %}
       </div>
     {% endfor %}
   {% else %}
     <p>No completed needs.</p>
   {% endif %}
 
+</div>
+
+<!-- ---------------- COMMENTS TAB ---------------- -->
+<div id="tab-comments" class="tab-content" style="display:none;">
+  <h3>Feedback Received</h3>
+  {% if comments %}
+    {% for comment in comments %}
+      <div class="comment-card">
+        <div class="comment-header">
+          <span class="comment-author">From {{ comment.from_email|mask_email }}</span>
+          <span class="comment-date">{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+        </div>
+        <div class="comment-body">{{ comment.content }}</div>
+        <div class="comment-footer">Related to: {{ comment.listing_title }}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No comments yet.</p>
+  {% endif %}
 </div>
 
 <!-- -------------- CSS -------------- -->
@@ -117,7 +155,35 @@
   background:#1f2937;
   opacity:0.8;
 }
+.comment-bubble {
+  background:#0f172a;
+  border-left:4px solid #38bdf8;
+  padding:10px;
+  border-radius:8px;
+  margin-top:8px;
+}
 
+.comment-meta { font-size:12px; color:#9ca3af; margin-bottom:4px; }
+.comment-text { font-size:14px; color:#e5e7eb; }
+
+.comment-card {
+  background:#0f172a;
+  padding:14px;
+  border-radius:10px;
+  margin:12px 0;
+  border:1px solid #1f2937;
+}
+
+.comment-header {
+  display:flex;
+  justify-content:space-between;
+  font-size:13px;
+  color:#9ca3af;
+  margin-bottom:6px;
+}
+
+.comment-body { font-size:15px; color:#f8fafc; margin-bottom:6px; }
+.comment-footer { font-size:12px; color:#cbd5e1; }
 .post-title {
   font-size:18px;
   font-weight:600;
@@ -134,21 +200,28 @@
 <!-- -------------- JAVASCRIPT TABS -------------- -->
 <script>
 function showTab(tab) {
-  // Hide both
-  document.getElementById("tab-active").style.display = "none";
-  document.getElementById("tab-completed").style.display = "none";
-
+  // Hide all
+  ["tab-active", "tab-completed", "tab-comments"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
   // Remove active class
   document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
 
   // Show selected
-  if (tab === "active") {
-    document.getElementById("tab-active").style.display = "block";
-    document.querySelector(".tab-btn:nth-child(1)").classList.add("active");
-  } else {
-    document.getElementById("tab-completed").style.display = "block";
-    document.querySelector(".tab-btn:nth-child(2)").classList.add("active");
-  }
+    const tabMap = {
+    "active": 0,
+    "completed": 1,
+    "comments": 2
+  };
+
+  const target = document.getElementById(`tab-${tab}`);
+  if (target) target.style.display = "block";
+
+  const index = tabMap[tab];
+  if (index !== undefined) {
+    const btn = document.querySelectorAll(".tab-btn")[index];
+    if (btn) btn.classList.add("active");}
 }
 </script>
 

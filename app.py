@@ -128,6 +128,16 @@ class Transaction(db.Model):
     status = db.Column(db.String(20), default="pending")
     # pending → accepted → completed
 
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_id = db.Column(db.Integer, db.ForeignKey("transaction.id"), nullable=False)
+    from_user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    to_user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    listing_type = db.Column(db.String(10), nullable=False)
+    listing_id = db.Column(db.Integer, nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 # ---------- ROUTES ----------
 
 @app.route("/")
@@ -195,6 +205,17 @@ def register():
 
     return render_template("register.html")
 
+@app.template_filter("mask_email")
+def mask_email(email):
+    """Return a privacy-friendly label instead of a raw email address."""
+    if not email:
+        return "Anonymous member"
+
+    local_part = email.split("@")[0]
+    if len(local_part) <= 2:
+        return "Anonymous member"
+
+    return f"{local_part[0]}***{local_part[-1]}"
 @app.route("/needs")
 def needs_page():
     needs = Need.query.filter_by(is_active=True).all()
@@ -391,6 +412,28 @@ def my_profile():
 
     active_needs = [need for need in user_needs if need.is_active]
     completed_needs = [need for need in user_needs if not need.is_active]
+    comments_received = Comment.query.filter_by(to_user_id=user.user_id).order_by(
+        Comment.created_at.desc()
+    ).all()
+
+    comments_with_meta = []
+    listing_comments = {}
+
+    for c in comments_received:
+        listing = Offer.query.get(c.listing_id) if c.listing_type == "offer" else Need.query.get(c.listing_id)
+        from_user = User.query.get(c.from_user_id)
+
+        key = f"{c.listing_type}:{c.listing_id}"
+        meta = {
+            "content": c.content,
+            "from_email": from_user.email if from_user else "Unknown user",
+            "listing_title": listing.title if listing else "Listing removed",
+            "created_at": c.created_at,
+        }
+
+        comments_with_meta.append(meta)
+
+        listing_comments.setdefault(key, []).append(meta)
 
     return render_template(
         "profile.html",
@@ -399,6 +442,8 @@ def my_profile():
         completed_offers=completed_offers,
         active_needs=active_needs,
         completed_needs=completed_needs,
+        comments=comments_with_meta,
+        listing_comments=listing_comments,
         is_owner=True
     )
 
@@ -417,6 +462,27 @@ def view_profile(user_id):
     active_needs = [need for need in user_needs if need.is_active]
     completed_needs = [need for need in user_needs if not need.is_active]
 
+    comments_received = Comment.query.filter_by(to_user_id=user.user_id).order_by(
+        Comment.created_at.desc()
+    ).all()
+
+    comments_with_meta = []
+    listing_comments = {}
+
+    for c in comments_received:
+        listing = Offer.query.get(c.listing_id) if c.listing_type == "offer" else Need.query.get(c.listing_id)
+        from_user = User.query.get(c.from_user_id)
+
+        key = f"{c.listing_type}:{c.listing_id}"
+        meta = {
+            "content": c.content,
+            "from_email": from_user.email if from_user else "Unknown user",
+            "listing_title": listing.title if listing else "Listing removed",
+            "created_at": c.created_at,
+        }
+
+        comments_with_meta.append(meta)
+        listing_comments.setdefault(key, []).append(meta)
 
     return render_template(
             "profile.html",
@@ -425,6 +491,8 @@ def view_profile(user_id):
             completed_offers=completed_offers,
             active_needs=active_needs,
             completed_needs=completed_needs,
+            comments=comments_with_meta,
+            listing_comments=listing_comments,
         )
 
 @app.route("/toggle-favorite/<int:offer_id>", methods=["POST"])
@@ -854,6 +922,35 @@ def complete_deal(deal_id):
                 type=deal.listing_type
             )
         )
+
+    # Yorum zorunluluğu
+    comment_text = request.form.get("comment", "").strip()
+    if not comment_text:
+        return "Please add a comment (max 250 characters) before completing the deal.", 400
+
+    if len(comment_text) > 250:
+        return "Comment exceeds 250 character limit.", 400
+
+    # Aynı kullanıcının aynı anlaşma için birden fazla yorum yazmasını engelle
+    existing_comment = Comment.query.filter_by(
+        transaction_id=deal.id, from_user_id=uid
+    ).first()
+
+    if existing_comment:
+        return "You have already submitted a comment for this deal.", 400
+
+    other_user_id = deal.receiver_id if uid == deal.starter_id else deal.starter_id
+
+    new_comment = Comment(
+        transaction_id=deal.id,
+        from_user_id=uid,
+        to_user_id=other_user_id,
+        listing_type=deal.listing_type,
+        listing_id=deal.listing_id,
+        content=comment_text,
+    )
+
+    db.session.add(new_comment)
     # Kullanıcı onayını işaretle
     if uid == deal.starter_id:
         deal.starter_confirm = True
