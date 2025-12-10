@@ -6,6 +6,8 @@ from flask_bcrypt import Bcrypt
 from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
 from datetime import datetime, timedelta
+import re
+import requests
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -13,7 +15,11 @@ ssl._create_default_https_context = ssl._create_unverified_context
 import os
 from uuid import uuid4
 from werkzeug.utils import secure_filename
-
+import time
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
+from requests.exceptions import SSLError
+geolocator = Nominatim(user_agent="the-hive", timeout=3)
 app = Flask(__name__)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
@@ -50,6 +56,30 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def geocode_with_retry(address, attempts=2):
+    """
+    Enhanced geocoding helper with:
+    - Istanbul fallback
+    - Global geolocator reuse (performance)
+    - Reduced attempts (faster)
+    """
+
+    if not address:
+        return None
+
+    # Perform Istanbul-focused query for more consistent results
+    query = f"{address}, Istanbul, Turkey"
+
+    for _ in range(attempts):
+        try:
+            loc = geolocator.geocode(query)
+            return loc
+        except (GeocoderTimedOut, GeocoderUnavailable, SSLError):
+            time.sleep(0.7)   # shorter sleep = faster experience
+        except Exception:
+            return None
+
+    return None
 # ---------- DATABASE MODEL ----------
 
 class User(db.Model):
@@ -138,13 +168,231 @@ class Comment(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
+# ---------- SEARCH & SEMANTIC HELPERS ----------
+
+WIKIDATA_SEARCH_URL = "https://www.wikidata.org/w/api.php"
+WIKIDATA_ENTITY_URL = "https://www.wikidata.org/w/api.php"
+WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
+
+
+def _collect_entity_labels(entity):
+    labels = set()
+    for lang in ("en", "tr"):
+        label = entity.get("labels", {}).get(lang, {}).get("value")
+        if label:
+            labels.add(label)
+    aliases = entity.get("aliases", {})
+    for lang_aliases in aliases.values():
+        for item in lang_aliases:
+            value = item.get("value")
+            if value:
+                labels.add(value)
+    description = entity.get("descriptions", {}).get("en", {}).get("value")
+    if description:
+        labels.update(re.split(r"[,;]+| and | or ", description))
+    return {label.strip().lower() for label in labels if label and len(label.strip()) >= 3}
+
+
+def _collect_related_entity_ids(claims, properties):
+    related_ids = set()
+    for prop in properties:
+        for claim in claims.get(prop, []):
+            mainsnak = claim.get("mainsnak", {})
+            datavalue = mainsnak.get("datavalue", {})
+            if datavalue.get("type") == "wikibase-entityid":
+                value = datavalue.get("value", {})
+                related_id = value.get("id")
+                if related_id:
+                    related_ids.add(related_id)
+    return related_ids
+
+
+def _fetch_related_labels_via_sparql(entity_id, max_items=15):
+    """Fetch broader/narrower labels connected to an entity via SPARQL."""
+    if not entity_id:
+        return set()
+
+    query = f"""
+    SELECT DISTINCT ?label WHERE {{
+      VALUES ?target {{ wd:{entity_id} }}
+      {{ ?item wdt:P279* ?target . }}
+      UNION {{ ?item wdt:P361* ?target . }}
+      UNION {{ ?target wdt:P527* ?item . }}
+      UNION {{ ?item wdt:P527* ?target . }}
+      ?item rdfs:label ?label .
+      FILTER(LANG(?label) IN ("en", "tr"))
+    }}
+    LIMIT {max_items}
+    """
+
+    try:
+        response = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers={"Accept": "application/sparql-results+json"},
+            timeout=6,
+        )
+        response.raise_for_status()
+        data = response.json()
+        results = data.get("results", {}).get("bindings", [])
+        labels = set()
+        for item in results:
+            label_val = item.get("label", {}).get("value")
+            if label_val:
+                labels.add(label_val.strip().lower())
+        return labels
+    except requests.RequestException:
+        return set()
+
+
+def _expand_query_tokens(query):
+    base_tokens = re.findall(r"[\w']+", query.lower())
+    expansions = set(base_tokens)
+
+    prefixes = ("re", "pre", "de", "un")
+    suffixes = ("ing", "ion", "tion", "s", "es", "ed", "al", "ment")
+
+    for token in base_tokens:
+        for prefix in prefixes:
+            if token.startswith(prefix) and len(token) - len(prefix) >= 3:
+                expansions.add(token[len(prefix) :])
+        for suffix in suffixes:
+            if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+                expansions.add(token[: -len(suffix)])
+
+    return {t for t in expansions if len(t) >= 3}
+
+
+def _fetch_entity_labels(entity_ids):
+    if not entity_ids:
+        return set()
+    try:
+        response = requests.get(
+            WIKIDATA_ENTITY_URL,
+            params={
+                "action": "wbgetentities",
+                "ids": "|".join(entity_ids),
+                "format": "json",
+                "languages": "en|tr",
+                "props": "labels|aliases|descriptions",
+            },
+            timeout=5,
+        )
+        response.raise_for_status()
+        data = response.json().get("entities", {})
+        labels = set()
+        for entity in data.values():
+            labels.update(_collect_entity_labels(entity))
+        return labels
+    except requests.RequestException:
+        return set()
+
+
+def fetch_wikidata_semantic_terms(query):
+    """Return a set of semantic keywords for the query using Wikidata."""
+    if not query:
+        return set()
+
+    expanded_tokens = _expand_query_tokens(query)
+    terms = set(expanded_tokens)
+
+    try:
+        search_response = requests.get(
+            WIKIDATA_SEARCH_URL,
+            params={
+                "action": "wbsearchentities",
+                "search": query,
+                "language": "en",
+                "format": "json",
+                "limit": 3,
+            },
+            timeout=5,
+        )
+        search_response.raise_for_status()
+        search_results = search_response.json().get("search", [])
+        if not search_results:
+            return terms or {query.lower()}
+
+        top_hit = search_results[0]
+        entity_id = top_hit.get("id")
+        if not entity_id:
+            return terms or {query.lower()}
+
+        entity_response = requests.get(
+            WIKIDATA_ENTITY_URL,
+            params={
+                "action": "wbgetentities",
+                "ids": entity_id,
+                "format": "json",
+                "languages": "en|tr",
+                "props": "labels|aliases|descriptions|claims",
+            },
+            timeout=5,
+        )
+        entity_response.raise_for_status()
+        entity = entity_response.json().get("entities", {}).get(entity_id, {})
+        terms.update(_collect_entity_labels(entity))
+
+        claims = entity.get("claims", {})
+        related_ids = _collect_related_entity_ids(claims, ["P279", "P31", "P361", "P527"])
+        terms.update(_fetch_entity_labels(related_ids))
+        terms.update(_fetch_related_labels_via_sparql(entity_id))
+        terms.add(query.lower())
+        return {t for t in terms if len(t) >= 3}
+    except requests.RequestException:
+        fallback_terms = terms or {query.lower()}
+        return fallback_terms
+
+
+def build_listing_filter(model, terms):
+    patterns = set()
+    for term in terms:
+        clean = term.strip().lower()
+        if clean:
+            patterns.add(clean)
+
+    if not patterns:
+        return None
+
+    filters = []
+    for pattern in patterns:
+        like_pattern = f"%{pattern}%"
+        filters.extend(
+            [
+                model.title.ilike(like_pattern),
+                model.description.ilike(like_pattern),
+                model.location.ilike(like_pattern),
+            ]
+        )
+    from sqlalchemy import or_
+
+    return or_(*filters)
+
 # ---------- ROUTES ----------
 
 @app.route("/")
 def index():
-    offers = Offer.query.filter_by(is_active=True).all()
-    needs = Need.query.filter_by(is_active=True).all()
+    query = request.args.get("q", "").strip()
 
+    if query:
+        terms = fetch_wikidata_semantic_terms(query)
+        offer_filter = build_listing_filter(Offer, terms)
+        need_filter = build_listing_filter(Need, terms)
+
+        offers_query = Offer.query.filter_by(is_active=True)
+        needs_query = Need.query.filter_by(is_active=True)
+
+        if offer_filter is not None:
+            offers_query = offers_query.filter(offer_filter)
+        if need_filter is not None:
+            needs_query = needs_query.filter(need_filter)
+
+        offers = offers_query.all()
+        needs = needs_query.all()
+    else:
+        offers = Offer.query.filter_by(is_active=True).all()
+        needs = Need.query.filter_by(is_active=True).all()
     user_favorites = set()
     user_need_favorites = set()
     if "user_id" in session:
@@ -160,6 +408,7 @@ def index():
         needs=needs,
         user_favorites=user_favorites,
         user_need_favorites=user_need_favorites,
+        search_query=query,
     )
 
 @app.route("/login", methods=["GET", "POST"])
@@ -275,26 +524,23 @@ def add_need():
         title = request.form["title"]
         description = request.form["description"]
         hours = int(request.form["hours"])
-        location = request.form["location"].capitalize()
 
-        from geopy.geocoders import Nominatim
-        from geopy.exc import GeocoderTimedOut
-        import time
+        # RAW USER LOCATION (strip kullanıyoruz — capitalize yok)
+        location_input = request.form["location"].strip()
 
-        geolocator = Nominatim(user_agent="the-hive", timeout=10)
+        # GEOCODE QUERY (İstanbul odaklı)
+        query = f"{location_input}, Istanbul, Turkey"
 
-        def safe_geocode(address, attempts=3):
-            for _ in range(attempts):
-                try:
-                    return geolocator.geocode(address)
-                except GeocoderTimedOut:
-                    time.sleep(1)
-            return None
+        # GEOCODING
+        try:
+            loc = geolocator.geocode(query, timeout=3)
+            lat = loc.latitude if loc else None
+            lon = loc.longitude if loc else None
+        except:
+            lat = None
+            lon = None
 
-        loc = safe_geocode(location)
-        lat = loc.latitude if loc else None
-        lon = loc.longitude if loc else None
-
+        # IMAGE HANDLING
         image_filename = None
         file = request.files.get("image")
 
@@ -308,13 +554,14 @@ def add_need():
             else:
                 return "Unsupported file type. Allowed: png, jpg, jpeg, gif", 400
 
+        # CREATE NEED ENTRY
         need = Need(
             user_id=session["user_id"],
             title=title,
             description=description,
             hours=hours,
-            location=location,
-            is_online=("online" in location.lower()),
+            location=location_input,  # DİKKAT: location değil, location_input
+            is_online=("online" in location_input.lower()),
             image_filename=image_filename,
             latitude=lat,
             longitude=lon,
@@ -339,22 +586,7 @@ def add_offer():
         hours = int(request.form["hours"])
         location = request.form["location"].capitalize()
 
-        # --- GEOCODING (Konum → Koordinat) ---
-        from geopy.geocoders import Nominatim
-        from geopy.exc import GeocoderTimedOut
-        import time
-
-        geolocator = Nominatim(user_agent="the-hive", timeout=10)
-
-        def safe_geocode(address, attempts=3):
-            for i in range(attempts):
-                try:
-                    return geolocator.geocode(address)
-                except GeocoderTimedOut:
-                    time.sleep(1)
-            return None
-
-        loc = safe_geocode(location)
+        loc = geocode_with_retry(location)
         lat = loc.latitude if loc else None
         lon = loc.longitude if loc else None
 
@@ -548,6 +780,12 @@ def offer_detail(offer_id):
 def need_detail(need_id):
     need = Need.query.get_or_404(need_id)
 
+    if need.location and (need.latitude is None or need.longitude is None):
+        loc = geocode_with_retry(need.location)
+        if loc:
+            need.latitude = loc.latitude
+            need.longitude = loc.longitude
+            db.session.commit()
     user_need_favorites = set()
     if "user_id" in session:
         favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()

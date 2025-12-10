@@ -136,10 +136,11 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-  const lat = {{ offer.latitude|default("null") }};
-  const lon = {{ offer.longitude|default("null") }};
+  // Serialize coordinates safely for JS (null when missing)
+  const lat = {{ offer.latitude|tojson }};
+  const lon = {{ offer.longitude|tojson }};
 
-  if (lat && lon) {
+  if (lat !== null && lon !== null) {
     const map = L.map('map').setView([lat, lon], 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
