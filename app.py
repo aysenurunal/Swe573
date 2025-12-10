@@ -383,38 +383,14 @@ def my_profile():
     # --- OFFER'lar ---
     user_offers = Offer.query.filter_by(user_id=user.user_id).all()
 
-    active_offers = []
-    completed_offers = []
-
-    for offer in user_offers:
-        finished = Transaction.query.filter_by(
-            listing_id=offer.offer_id,
-            listing_type="offer",
-            status="completed"
-        ).first()
-
-        if finished:
-            completed_offers.append(offer)
-        else:
-            active_offers.append(offer)
+    active_offers = [offer for offer in user_offers if offer.is_active]
+    completed_offers = [offer for offer in user_offers if not offer.is_active]
 
     # --- NEED'ler ---
     user_needs = Need.query.filter_by(user_id=user.user_id).all()
 
-    active_needs = []
-    completed_needs = []
-
-    for need in user_needs:
-        finished = Transaction.query.filter_by(
-            listing_id=need.need_id,
-            listing_type="need",
-            status="completed"
-        ).first()
-
-        if finished:
-            completed_needs.append(need)
-        else:
-            active_needs.append(need)
+    active_needs = [need for need in user_needs if need.is_active]
+    completed_needs = [need for need in user_needs if not need.is_active]
 
     return render_template(
         "profile.html",
@@ -433,45 +409,23 @@ def view_profile(user_id):
 
     # OFFER'lar
     user_offers = Offer.query.filter_by(user_id=user_id).all()
-    active_offers = []
-    completed_offers = []
-
-    for offer in user_offers:
-        finished = Transaction.query.filter_by(
-            listing_id=offer.offer_id,
-            listing_type="offer",
-            status="completed"
-        ).first()
-        if finished:
-            completed_offers.append(offer)
-        else:
-            active_offers.append(offer)
+    active_offers = [offer for offer in user_offers if offer.is_active]
+    completed_offers = [offer for offer in user_offers if not offer.is_active]
 
     # NEED'ler
     user_needs = Need.query.filter_by(user_id=user_id).all()
-    active_needs = []
-    completed_needs = []
+    active_needs = [need for need in user_needs if need.is_active]
+    completed_needs = [need for need in user_needs if not need.is_active]
 
-    for need in user_needs:
-        finished = Transaction.query.filter_by(
-            listing_id=need.need_id,
-            listing_type="need",
-            status="completed"
-        ).first()
-        if finished:
-            completed_needs.append(need)
-        else:
-            active_needs.append(need)
 
     return render_template(
-        "profile.html",
-        user=user,
-        active_offers=active_offers,
-        completed_offers=completed_offers,
-        active_needs=active_needs,
-        completed_needs=completed_needs,
-
-    )
+            "profile.html",
+            user=user,
+            active_offers=active_offers,
+            completed_offers=completed_offers,
+            active_needs=active_needs,
+            completed_needs=completed_needs,
+        )
 
 @app.route("/toggle-favorite/<int:offer_id>", methods=["POST"])
 def toggle_favorite(offer_id):
@@ -614,9 +568,12 @@ def chat(user_id):
     else:
         listing = Need.query.get(listing_id)
 
-    if not listing.is_active:
-        return "❌ This post is completed. Chat and deals are no longer available."
+    if not listing:
+        return "Listing not found for this chat."
 
+        # Listing kapanmış olsa bile mesajlaşmaya izin veriyoruz; yeni anlaşma başlatmayı
+        # şablon tarafında devre dışı bırakacağız.
+    listing_closed = not listing.is_active
     # -------------------- MESAJ GÖNDER --------------------
     if request.method == "POST" and "message" in request.form:
         text = request.form["message"].strip()
@@ -689,7 +646,8 @@ def chat(user_id):
         listing=listing,
         listing_type=listing_type,
         listing_data=listing_data,
-        timeline=timeline
+        timeline=timeline,
+        listing_closed=listing_closed
     )
 
 
@@ -727,6 +685,7 @@ def messages_list():
     return render_template("messages_list.html", conversations=conversations)
 
 @app.route("/deal/start/<int:other_id>", methods=["POST"])
+@login_required
 def start_deal(other_id):
     if "user_id" not in session:
         return redirect("/login")
@@ -749,12 +708,19 @@ def start_deal(other_id):
     # ---------------------------
     # 2) Listing Context
     # ---------------------------
-    listing_id = session.get("active_listing_id")
-    listing_type = session.get("active_listing_type")
+    listing_id = request.form.get("listing_id", type=int) or session.get("active_listing_id")
+    listing_type = request.form.get("listing_type") or session.get("active_listing_type")
 
     if not listing_id or not listing_type:
         return redirect(url_for("chat", user_id=other_id))
 
+        # İlan tamamlandıysa yeni bir deal başlatma
+    listing = Offer.query.get(listing_id) if listing_type == "offer" else Need.query.get(listing_id)
+    if not listing:
+        return redirect(url_for("chat", user_id=other_id))
+
+    if not listing.is_active:
+        return redirect(url_for("chat", user_id=other_id, listing_id=listing_id, type=listing_type))
     # ---------------------------
     # 3) NEW DEAL Oluştur
     # ---------------------------
@@ -848,8 +814,9 @@ def accept_deal(deal_id):
         d.status = "cancelled"
 
     # ----------------- 2) Bu deal accepted olur -----------------
-    deal.receiver_confirm = True
     deal.status = "accepted"
+    deal.starter_confirm = False
+    deal.receiver_confirm = False
 
     db.session.commit()
 
@@ -918,7 +885,14 @@ def complete_deal(deal_id):
 
     # Chat ekranına geri dön
     other_user = deal.receiver_id if uid == deal.starter_id else deal.starter_id
-    return redirect(url_for("chat", user_id=other_user))
+    return redirect(
+        url_for(
+            "chat",
+            user_id=other_user,
+            listing_id=deal.listing_id,
+            type=deal.listing_type
+        )
+    )
 
 @app.route("/deal/cancel_request/<int:deal_id>", methods=["POST"])
 def cancel_request(deal_id):

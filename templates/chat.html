@@ -93,13 +93,22 @@
             {% endif %}
 
           {% elif deal.status == "accepted" %}
-            <form action="/deal/complete/{{ deal.id }}" method="post" style="display:inline;">
-              <button class="btn-small success">Confirm Completion</button>
-            </form>
+            {% set i_confirmed = (session['user_id'] == deal.starter_id and deal.starter_confirm) or
+                                   (session['user_id'] == deal.receiver_id and deal.receiver_confirm) %}
 
-            <form action="/deal/cancel_request/{{ deal.id }}" method="post" style="display:inline;">
-              <button class="btn-small danger">Request Cancel</button>
-            </form>
+            {% if not i_confirmed %}
+              <form action="/deal/complete/{{ deal.id }}" method="post" style="display:inline;">
+                <button class="btn-small success">Confirm Completion</button>
+              </form>
+            {% else %}
+              <span class="deal-note">Waiting for other user to confirm…</span>
+            {% endif %}
+
+            {% if not (deal.starter_confirm and deal.receiver_confirm) %}
+              <form action="/deal/cancel_request/{{ deal.id }}" method="post" style="display:inline;">
+                <button class="btn-small danger">Request Cancel</button>
+              </form>
+            {% endif %}
 
           {% elif deal.status == "cancel_pending" %}
             {% if (session['user_id'] == deal.starter_id and not deal.cancel_starter_confirm)
@@ -126,19 +135,22 @@
 
 
 <!-- ---------------- START DEAL FORM ---------------- -->
-<form action="/deal/start/{{ other_user.user_id }}"
-      method="post"
-      class="deal-form">
+{% if listing_closed %}
+  <div class="deal-note" style="text-align:center; margin:12px 0;">
+    This post is completed. Messaging remains open, but new deals are disabled.
+  </div>
+{% else %}
+  <form action="/deal/start/{{ other_user.user_id }}"
+        method="post"
+        class="deal-form">
 
   <input type="hidden" name="listing_id" value="{{ session['active_listing_id'] }}">
-  <input type="hidden" name="listing_type" value="{{ session['active_listing_type'] }}">
-
-  <input type="number" name="hours" min="1" required placeholder="Hours" class="deal-input">
-  <input type="date" name="date" required class="deal-input">
-  <input type="time" name="time" required class="deal-input">
-
+      <input type="hidden" name="listing_type" value="{{ session['active_listing_type'] }}">
+    <input type="number" name="hours" min="1" required placeholder="Hours" class="deal-input">
+    <input type="date" name="date" required class="deal-input"><input type="time" name="time" required class="deal-input">
   <button class="btn-msg">Start Deal</button>
-</form>
+  </form>
+{% endif %}
 
 
 <!-- ---------------- MESSAGE INPUT ---------------- -->
