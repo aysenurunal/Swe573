@@ -2,13 +2,24 @@
 {% block title %}Messages — The Hive{% endblock %}
 {% block content %}
 
+<style>
+  .notification-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background: #ff4757;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  }
+</style>
+
 <h2 style="margin-bottom:16px;">Messages</h2>
 
 {% if conversations %}
   {% for c in conversations %}
     <a href="{{ url_for('chat', user_id=c.other_id, listing_id=c.listing_id, type=c.listing_type) }}"
        style="text-decoration:none; color:#e5e7eb;">
-      <div class="offer-card" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="offer-card" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
         <div>
           <strong>{{ c.email }}</strong><br>
           <span style="opacity:.8;">
@@ -20,7 +31,12 @@
             <span style="opacity:.7;">{{ c.last_message }}</span>
           </span>
         </div>
-        <span style="opacity:.6; font-size:.85rem;">{{ c.last_time }}</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          {% if c.has_notification %}
+            <span class="notification-dot" title="New message or deal"></span>
+          {% endif %}
+          <span style="opacity:.6; font-size:.85rem;">{{ c.last_time }}</span>
+        </div>
       </div>
     </a>
   {% endfor %}

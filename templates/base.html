@@ -8,18 +8,21 @@
   <style>
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background:#f3f4f6;
+      background:#ffffff;
       margin:0;
       padding-bottom:140px;
+        color:#111827;
     }
 
     header {
-      padding:16px 20px;
-      background:#111;
-      color:#fff;
+      padding:16px 20px 18px;
+      background:linear-gradient(135deg, #1f2937, #0f172a);
+      color:#e5e7eb;
       font-size:1.3rem;
       font-weight:600;
       text-align:center;
+       box-shadow:0 6px 14px rgba(0,0,0,0.25);
+      border-bottom:4px solid #ffd84d
     }
 
     main {
@@ -206,23 +209,25 @@
       display:flex;
       gap:8px;
       justify-content:space-around;
-      background:#111;
+        background:#0f172a;
       padding:10px;
-      z-index:9999;   /* 👈 buraya ekle */
+      z-index:9999;
+        border-top:1px solid #e5e7eb;
     }
 
 
     .nav-bottom a {
-      color:#e5e7eb;
+      color:#f8fafc;
       text-decoration:none;
-      background:#374151;
+      background:transparent;
       padding:8px 12px;
       border-radius:8px;
       font-size:.9rem;
+        transition: background-color 0.2s ease;
     }
 
     .nav-bottom a:hover {
-      background:#4b5563;
+      background:rgba(255, 255, 255, 0.1);
     }
 
   </style>

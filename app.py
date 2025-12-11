@@ -9,7 +9,8 @@ from flask import (
     session,
     url_for,
     send_from_directory,
-)from flask_sqlalchemy import SQLAlchemy
+)
+from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from config import ADMIN_EMAIL, ADMIN_PASSWORD, SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
@@ -1013,14 +1014,11 @@ def chat(user_id):
     if is_blocked_between(me, other):
         return "Messaging is disabled between blocked users.", 403
 
-    listing_id_arg = request.args.get("listing_id")
-    listing_type_arg = request.args.get("type")
+    listing_id, listing_type = get_chat_listing_context()
 
-    if listing_id_arg and listing_type_arg:
-        session["active_listing_id"] = int(listing_id_arg)
-        session["active_listing_type"] = listing_type_arg
-
-    if not session.get("active_listing_id") or not session.get("active_listing_type"):
+    if not listing_id or not listing_type:
+        # Fallback to the most recent conversation context so the chat page
+        # still works even if the user refreshed without query params.
         last_msg = Message.query.filter(
             (
                 ((Message.sender_id == me) & (Message.receiver_id == other)) |
@@ -1032,6 +1030,8 @@ def chat(user_id):
         if last_msg:
             session["active_listing_id"] = last_msg.listing_id
             session["active_listing_type"] = last_msg.listing_type
+            listing_id = last_msg.listing_id
+            listing_type = last_msg.listing_type
         else:
             return "Listing context missing. Open chat from an Offer or Need page."
 
@@ -1108,6 +1108,8 @@ def chat(user_id):
 
     other_user = User.query.get(other)
 
+    last_message_ts = messages[-1].timestamp.isoformat() if messages else ""
+
     listing_data = {
         "type": listing_type,
         "title": listing.title,
@@ -1123,9 +1125,90 @@ def chat(user_id):
         listing_type=listing_type,
         listing_data=listing_data,
         timeline=timeline,
-        listing_closed=listing_closed
+        listing_closed=listing_closed,
+        last_message_ts=last_message_ts
     )
 
+@app.route("/chat/<int:user_id>/messages", methods=["GET", "POST"])
+@login_required
+def chat_messages(user_id):
+    me = session["user_id"]
+    other = user_id
+
+    listing_id, listing_type = get_chat_listing_context()
+
+    # If the request arrives without explicit context (e.g. after refresh),
+    # reuse the latest conversation listing so polling continues to work.
+    if not listing_id or not listing_type:
+        last_msg = Message.query.filter(
+            (
+                ((Message.sender_id == me) & (Message.receiver_id == other))
+                | ((Message.sender_id == other) & (Message.receiver_id == me))
+            )
+            & (Message.listing_id.isnot(None))
+        ).order_by(Message.timestamp.desc()).first()
+
+        if last_msg:
+            listing_id = last_msg.listing_id
+            listing_type = last_msg.listing_type
+            session["active_listing_id"] = listing_id
+            session["active_listing_type"] = listing_type
+
+    if not listing_id or not listing_type:
+        return jsonify({"error": "listing_context_missing"}), 400
+
+    def serialize_message(msg):
+        return {
+            "id": msg.id,
+            "sender_id": msg.sender_id,
+            "receiver_id": msg.receiver_id,
+            "content": msg.content,
+            "timestamp": msg.timestamp.isoformat(),
+        }
+
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        text = payload.get("message") if isinstance(payload, dict) else None
+        if text is None:
+            text = request.form.get("message")
+
+        text = (text or "").strip()
+
+        if not text:
+            return jsonify({"error": "empty_message"}), 400
+
+        msg = Message(
+            sender_id=me,
+            receiver_id=other,
+            content=text,
+            listing_id=listing_id,
+            listing_type=listing_type,
+        )
+        db.session.add(msg)
+        db.session.commit()
+
+        return jsonify({"message": serialize_message(msg)}), 201
+
+    after = request.args.get("after")
+
+    messages_query = Message.query.filter(
+        (
+            ((Message.sender_id == me) & (Message.receiver_id == other))
+            | ((Message.sender_id == other) & (Message.receiver_id == me))
+        )
+        & (Message.listing_id == listing_id)
+        & (Message.listing_type == listing_type)
+    )
+    if after:
+        try:
+            after_dt = datetime.fromisoformat(after)
+            messages_query = messages_query.filter(Message.timestamp > after_dt)
+        except ValueError:
+            pass
+
+    messages = messages_query.order_by(Message.timestamp.asc()).all()
+
+    return jsonify({"messages": [serialize_message(m) for m in messages]})
 
 @app.route("/messages")
 @login_required
@@ -1176,17 +1259,53 @@ def messages_list():
             listing_location = listing.location
         else:
             listing_title = f"{convo.listing_type.title()} #{convo.listing_id}"
+        latest_msg = Message.query.filter(
+            (
+                    ((Message.sender_id == my_id) & (Message.receiver_id == convo.other_id)) |
+                    ((Message.sender_id == convo.other_id) & (Message.receiver_id == my_id))
+            )
+            &
+            (Message.listing_id == convo.listing_id)
+            &
+            (Message.listing_type == convo.listing_type)
+        ).order_by(Message.timestamp.desc()).first()
+
+        latest_deal = Transaction.query.filter(
+            (
+                    (Transaction.starter_id == my_id) & (Transaction.receiver_id == convo.other_id)
+            ) |
+            (
+                    (Transaction.starter_id == convo.other_id) & (Transaction.receiver_id == my_id)
+            )
+        ).filter(
+            Transaction.listing_id == convo.listing_id,
+            Transaction.listing_type == convo.listing_type
+        ).order_by(Transaction.date.desc()).first()
+
+        latest_event_time = None
+        has_notification = False
+
+        if latest_msg:
+            latest_event_time = latest_msg.timestamp
+            has_notification = latest_msg.sender_id != my_id
+
+        if latest_deal and (latest_event_time is None or latest_deal.date > latest_event_time):
+            latest_event_time = latest_deal.date
+            has_notification = latest_deal.starter_id != my_id
+
+        last_time = latest_event_time or convo.last_time
 
         enriched_conversations.append({
             "other_id": convo.other_id,
             "email": convo.email,
             "listing_id": convo.listing_id,
             "listing_type": convo.listing_type,
-            "last_time": convo.last_time,
+            "last_time": last_time,
             "last_message": convo.last_message,
             "listing_title": listing_title,
             "listing_hours": listing_hours,
             "listing_location": listing_location,
+            "has_notification": has_notification,
         })
 
     return render_template("messages_list.html", conversations=enriched_conversations)

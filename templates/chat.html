@@ -8,29 +8,37 @@
 
 <!-- ---------------- LISTING SUMMARY CARD ---------------- -->
 {% if listing_data %}
-  <div class="listing-summary">
-    <div class="listing-icon">
-      {% if listing_data.type == "offer" %}
-        🟡 Offer
-      {% else %}
-        🔵 Need
-      {% endif %}
-    </div>
+  {% if listing_data.type == "offer" %}
+    {% set listing_url = url_for("offer_detail", offer_id=listing_data.id) %}
+  {% else %}
+    {% set listing_url = url_for("need_detail", need_id=listing_data.id) %}
+  {% endif %}
 
-    <div class="listing-info">
-      <div class="listing-title">
-        {{ listing_data.title }}
+  <a class="listing-summary-link" href="{{ listing_url }}" style="text-decoration:none; color:inherit;">
+    <div class="listing-summary">
+      <div class="listing-icon">
+        {% if listing_data.type == "offer" %}
+          🟡 Offer
+        {% else %}
+          🔵 Need
+        {% endif %}
       </div>
 
-      <div class="listing-meta">
-        {{ listing_data.hours }} hours — {{ listing_data.location }}
+      <div class="listing-info">
+        <div class="listing-title">
+          {{ listing_data.title }}
+        </div>
+
+        <div class="listing-meta">
+          {{ listing_data.hours }} hours — {{ listing_data.location }}
+        </div>
+      </div>
+
+      <div class="listing-thumb">
+        📄
       </div>
     </div>
-
-    <div class="listing-thumb">
-      📄
-    </div>
-  </div>
+  </a>
 {% endif %}
 
 <!-- ---------------- TIMELINE (Messages + Deals) ---------------- -->
@@ -188,6 +196,11 @@
 <!-- ---------------- STYLES ---------------- -->
 <style>
 /* Listing summary card (top banner) */
+.listing-summary-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
 .listing-summary {
   display: flex;
   align-items: center;
@@ -233,9 +246,10 @@
   flex-direction: column;
   gap: 8px;
   padding-bottom: 80px;
-  background: #0f172a;
+  background: #ffffff;
   border-radius: 12px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
   position: relative;
 }
 
@@ -298,7 +312,7 @@
   font-size: 0.7rem;
   padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(0,0,0,0.1);
+  background: rgba(17,24,39,0.08);
 }
 
 .deal-body {
@@ -382,7 +396,8 @@
   padding: 10px;
   display: flex;
   gap: 10px;
-  background: #f3f4f6;
+  background: #ffffff;
+  border-top:1px solid #e5e7eb;
 }
 
 .chat-input input {
@@ -412,12 +427,12 @@
 }
 
 .toast {
-  background: rgba(17, 24, 39, 0.95);
-  color: #f9fafb;
+  background: #ffffff;
+  color: #111827;
   padding: 12px 14px;
   border-radius: 10px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-  border: 1px solid #1f2937;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+  border: 1px solid #e5e7eb;
   min-width: 220px;
 }
 </style>
