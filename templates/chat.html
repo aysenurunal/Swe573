@@ -33,10 +33,14 @@
   </div>
 {% endif %}
 
-
-
 <!-- ---------------- TIMELINE (Messages + Deals) ---------------- -->
-<div class="timeline">
+<div class="timeline"
+     data-last-timestamp="{{ last_message_ts }}"
+     data-other-id="{{ other_user.user_id }}"
+     data-listing-id="{{ session['active_listing_id'] }}"
+     data-listing-type="{{ session['active_listing_type'] }}"
+     data-current-user-id="{{ session['user_id'] }}"
+     data-other-email="{{ other_user.email }}">
   {% for item in timeline %}
 
     {# ---------- MESAJ BALONU ---------- #}
@@ -44,7 +48,6 @@
       <div class="msg-bubble {% if item.sender_id == session['user_id'] %}me{% else %}them{% endif %}">
         <div class="msg-meta">{{ item.timestamp.strftime("%d.%m.%Y %H:%M") }}</div>
         <div class="msg-text">{{ item.content }}</div>
-
       </div>
 
     {# ---------- DEAL BALONU ---------- #}
@@ -100,8 +103,14 @@
 
             {% if not i_confirmed %}
               <form action="/deal/complete/{{ deal.id }}" method="post" class="comment-complete-form">
-                <label for="comment-{{ deal.id }}" class="comment-label">Add a comment (max 250 chars) before completing:</label>
-                <textarea name="comment" id="comment-{{ deal.id }}" maxlength="250" required placeholder="Share feedback for {{ other_user.email }}"></textarea>
+                <label for="comment-{{ deal.id }}" class="comment-label">
+                  Add a comment (max 250 chars) before completing:
+                </label>
+                <textarea name="comment"
+                          id="comment-{{ deal.id }}"
+                          maxlength="250"
+                          required
+                          placeholder="Share feedback for {{ other_user.email }}"></textarea>
                 <button class="btn-small success">Confirm Completion</button>
               </form>
             {% else %}
@@ -137,7 +146,6 @@
   {% endfor %}
 </div>
 
-
 <!-- ---------------- START DEAL FORM ---------------- -->
 {% if listing_closed %}
   <div class="deal-note" style="text-align:center; margin:12px 0;">
@@ -148,33 +156,44 @@
         method="post"
         class="deal-form">
 
-  <input type="hidden" name="listing_id" value="{{ session['active_listing_id'] }}">
-      <input type="hidden" name="listing_type" value="{{ session['active_listing_type'] }}">
-    <input type="number" name="hours" min="1" required placeholder="Hours" class="deal-input">
-    <input type="date" name="date" required class="deal-input"><input type="time" name="time" required class="deal-input">
-  <button class="btn-msg">Start Deal</button>
+    <input type="hidden" name="listing_id" value="{{ session['active_listing_id'] }}">
+    <input type="hidden" name="listing_type" value="{{ session['active_listing_type'] }}">
+
+    <input type="number"
+           name="hours"
+           min="1"
+           required
+           placeholder="Hours"
+           class="deal-input">
+    <input type="date"
+           name="date"
+           required
+           class="deal-input">
+    <input type="time"
+           name="time"
+           required
+           class="deal-input">
+
+    <button class="btn-msg">Start Deal</button>
   </form>
 {% endif %}
 
-
 <!-- ---------------- MESSAGE INPUT ---------------- -->
-<form action="" method="post" class="chat-input">
-  <input type="text" name="message" placeholder="Type a message..." required>
+<form action="" method="post" class="chat-input" id="chat-form">
+  <input type="text" name="message" id="chat-message" placeholder="Type a message..." required>
   <button type="submit">Send</button>
 </form>
-
+<div id="toast-container"></div>
 
 <!-- ---------------- STYLES ---------------- -->
 <style>
-
-/* --- LISTING SUMMARY CARD --- */
 /* Listing summary card (top banner) */
 .listing-summary {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: #1e1e1e;              /* koyu gri / siyaha yakın */
-  color: #fff;                       /* yazılar beyaz */
+  background: #1e1e1e;
+  color: #fff;
   padding: 12px 16px;
   border-radius: 14px;
   margin-bottom: 20px;
@@ -205,7 +224,6 @@
   opacity: 0.8;
 }
 
-
 /* Timeline container */
 .timeline {
   max-height: 60vh;
@@ -215,6 +233,10 @@
   flex-direction: column;
   gap: 8px;
   padding-bottom: 80px;
+  background: #0f172a;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  position: relative;
 }
 
 /* Message bubbles */
@@ -228,9 +250,14 @@
 }
 
 .msg-bubble.me,
-.deal-bubble.me { align-self: flex-end; }
+.deal-bubble.me {
+  align-self: flex-end;
+}
+
 .msg-bubble.them,
-.deal-bubble.them { align-self: flex-start; }
+.deal-bubble.them {
+  align-self: flex-start;
+}
 
 .msg-bubble.me {
   background: #FFD84D;
@@ -238,9 +265,10 @@
 }
 
 .msg-bubble.them {
-    background: #E5E5EA;
-    border-bottom-left-radius: 4px;
+  background: #E5E5EA;
+  border-bottom-left-radius: 4px;
 }
+
 .msg-meta {
   font-size: 0.75rem;
   opacity: 0.8;
@@ -259,7 +287,12 @@
 .deal-cancel-pending { background:#fee2e2; border:1px solid #fecaca; }
 .deal-cancelled { background:#fecaca; border:1px solid #ef4444; }
 
-.deal-header { display:flex; justify-content:space-between; font-weight:600; margin-bottom:6px; }
+.deal-header {
+  display:flex;
+  justify-content:space-between;
+  font-weight:600;
+  margin-bottom:6px;
+}
 
 .deal-status-tag {
   font-size: 0.7rem;
@@ -268,9 +301,21 @@
   background: rgba(0,0,0,0.1);
 }
 
-.deal-body { font-size: 0.9rem; margin-bottom: 8px; }
-.deal-actions { display:flex; gap:6px; flex-wrap:wrap; }
-.deal-note { font-size:0.8rem; opacity:0.85; }
+.deal-body {
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+
+.deal-actions {
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+.deal-note {
+  font-size:0.8rem;
+  opacity:0.85;
+}
 
 .comment-complete-form {
   display: flex;
@@ -305,7 +350,7 @@
 
 .btn-small.primary { background:#3b82f6; color:white; }
 .btn-small.success { background:#22c55e; color:white; }
-.btn-small.danger { background:#ef4444; color:white; }
+.btn-small.danger  { background:#ef4444; color:white; }
 
 /* Start Deal form */
 .deal-form {
@@ -355,6 +400,182 @@
   font-weight: 600;
 }
 
+/* Toasts */
+#toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 99;
+}
+
+.toast {
+  background: rgba(17, 24, 39, 0.95);
+  color: #f9fafb;
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  border: 1px solid #1f2937;
+  min-width: 220px;
+}
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const timelineEl = document.querySelector('.timeline');
+  const chatForm = document.getElementById('chat-form');
+  const messageInput = document.getElementById('chat-message');
+  const toastContainer = document.getElementById('toast-container');
+
+  if (!timelineEl) {
+    return;
+  }
+
+  let lastTimestamp = timelineEl.dataset.lastTimestamp || '';
+  const otherUserId   = timelineEl.dataset.otherId;
+  const listingId     = timelineEl.dataset.listingId;
+  const listingType   = timelineEl.dataset.listingType;
+  const currentUserId = timelineEl.dataset.currentUserId;
+  const otherUserEmail = timelineEl.dataset.otherEmail;
+
+  function formatTimestamp(ts) {
+    const date = new Date(ts);
+    return date.toLocaleString('tr-TR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  }
+
+  function scrollTimelineToBottom() {
+    timelineEl.scrollTop = timelineEl.scrollHeight;
+  }
+
+  function addMessageBubble(msg) {
+    const isMe = String(msg.sender_id) === String(currentUserId);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `msg-bubble ${isMe ? 'me' : 'them'}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.textContent = formatTimestamp(msg.timestamp);
+
+    const text = document.createElement('div');
+    text.className = 'msg-text';
+    text.textContent = msg.content;
+
+    wrapper.appendChild(meta);
+    wrapper.appendChild(text);
+    timelineEl.appendChild(wrapper);
+  }
+
+  function showToast(text) {
+    if (!toastContainer) return;
+
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    toastContainer.appendChild(el);
+
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity 0.4s ease';
+      setTimeout(() => el.remove(), 400);
+    }, 3500);
+  }
+
+  function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  function notifyNewMessage(msg) {
+    const text = `New message from ${otherUserEmail}: ${msg.content}`;
+    showToast(text);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('New message', { body: msg.content });
+    }
+  }
+
+  async function sendMessage(text) {
+    if (!text || !otherUserId || !listingId || !listingType) return;
+
+    const params = new URLSearchParams({
+      listing_id: listingId,
+      listing_type: listingType
+    });
+
+    const res = await fetch(`/chat/${otherUserId}/messages?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.message) {
+        addMessageBubble(data.message);
+        lastTimestamp = data.message.timestamp;
+        scrollTimelineToBottom();
+      }
+    }
+  }
+
+  async function pollMessages() {
+    if (!otherUserId || !listingId || !listingType) return;
+
+    const params = new URLSearchParams({
+      listing_id: listingId,
+      listing_type: listingType
+    });
+
+    if (lastTimestamp) {
+      params.append('after', lastTimestamp);
+    }
+
+    const res = await fetch(`/chat/${otherUserId}/messages?${params.toString()}`);
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (!data.messages || !Array.isArray(data.messages)) return;
+
+    data.messages.forEach(msg => {
+      addMessageBubble(msg);
+      if (String(msg.sender_id) !== String(currentUserId)) {
+        notifyNewMessage(msg);
+      }
+      lastTimestamp = msg.timestamp;
+    });
+
+    if (data.messages.length) {
+      scrollTimelineToBottom();
+    }
+  }
+
+  // Initial scroll + notifications
+  scrollTimelineToBottom();
+  requestNotificationPermission();
+
+  if (chatForm && messageInput) {
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = messageInput.value.trim();
+      if (!text) return;
+      await sendMessage(text);
+      messageInput.value = '';
+      messageInput.focus();
+    });
+  }
+
+  setInterval(pollMessages, 4000);
+});
+</script>
 
 {% endblock %}

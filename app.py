@@ -1,9 +1,17 @@
 
 
-from flask import Flask, render_template, request, redirect, session, url_for, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
+from flask import (
+    Flask,
+    jsonify,
+    render_template,
+    request,
+    redirect,
+    session,
+    url_for,
+    send_from_directory,
+)from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from config import SQLALCHEMY_DATABASE_URI, SECRET_KEY
+from config import ADMIN_EMAIL, ADMIN_PASSWORD, SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
 from datetime import datetime, timedelta
 import re
@@ -33,7 +41,19 @@ def initialize_database():
     if not getattr(app, "db_initialized", False):
         with app.app_context():
             db.create_all()
+            ensure_admin_user()
         app.db_initialized = True
+
+@app.before_request
+def enforce_ban():
+    user_id = session.get("user_id")
+    if not user_id:
+        return
+
+    user = User.query.get(user_id)
+    if user and user.is_banned and request.endpoint not in {"logout", "login"}:
+        session.clear()
+        return render_template("login.html", error="Your account has been banned."), 403
 
 from functools import wraps
 from flask import redirect, session, url_for
@@ -46,6 +66,50 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id:
+            return redirect(url_for("login"))
+
+        user = User.query.get(user_id)
+        if not user or not user.is_admin:
+            return "Admin access required", 403
+
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+def is_blocked_between(user_a_id, user_b_id):
+    if not user_a_id or not user_b_id:
+        return False
+    return UserBlock.query.filter(
+        ((UserBlock.blocker_id == user_a_id) & (UserBlock.blocked_id == user_b_id)) |
+        ((UserBlock.blocker_id == user_b_id) & (UserBlock.blocked_id == user_a_id))
+    ).first() is not None
+
+
+def get_admin_user():
+    return User.query.filter_by(is_admin=True).first()
+
+
+def ensure_admin_user():
+    admin = get_admin_user()
+    if admin:
+        return admin
+
+    password_hash = bcrypt.generate_password_hash(ADMIN_PASSWORD).decode("utf-8")
+    admin = User(
+        email=ADMIN_EMAIL,
+        password_hash=password_hash,
+        is_admin=True,
+        timebank_balance=0,
+    )
+    db.session.add(admin)
+    db.session.commit()
+    return admin
 
 # Resimler buraya kaydedilecek:
 app.config["UPLOAD_FOLDER"] = os.path.join("static", "uploads")
@@ -87,10 +151,18 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     timebank_balance = db.Column(db.Integer, default=3)
+    is_admin = db.Column(db.Boolean, default=False)
+    is_banned = db.Column(db.Boolean, default=False)
     offers = db.relationship("Offer", backref="user", lazy=True)
     needs = db.relationship("Need", backref="user", lazy=True)
     favorites = db.relationship("Favorite", backref="user", lazy=True)
     need_favorites = db.relationship("NeedFavorite", backref="user", lazy=True)
+
+class UserBlock(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    blocked_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    __table_args__ = (db.UniqueConstraint("blocker_id", "blocked_id", name="uq_block_pair"),)
 
 class Offer(db.Model):
     offer_id = db.Column(db.Integer, primary_key=True)
@@ -135,8 +207,8 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     listing_id= db.Column(db.Integer, nullable=True)  # İlgili ilan ID'si (opsiyonel)
-    listing_type = db.Column(db.String(10), nullable=False)  # 'offer' veya 'need' (opsiyonel)
-#----------------------DEAL MODEL-----------------------
+    listing_type = db.Column(db.String(10), nullable=False,default="general")  # 'offer', 'need', 'report', 'general'
+    # #----------------------DEAL MODEL-----------------------
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
@@ -420,6 +492,8 @@ def login():
         user = User.query.filter_by(email=email).first()
 
         if user and bcrypt.check_password_hash(user.password_hash, password):
+            if user.is_banned:
+                return render_template("login.html", error="Your account has been banned.")
             session["user_id"] = user.user_id
             return redirect(url_for("index"))
 
@@ -443,6 +517,8 @@ def register():
             return "Email is already registered."
 
         password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+        if email == ADMIN_EMAIL:
+            return "Cannot register with admin email."
         user = User(email=email, password_hash=password_hash)
 
         user.timebank_balance = 3
@@ -676,13 +752,25 @@ def my_profile():
         completed_needs=completed_needs,
         comments=comments_with_meta,
         listing_comments=listing_comments,
-        is_owner=True
+        is_owner=True,
+        is_blocking = False,
+        admin_viewer = user.is_admin
     )
 
 
 @app.route("/profile/<int:user_id>")
 def view_profile(user_id):
     user = User.query.get_or_404(user_id)
+    current_user_id = session.get("user_id")
+    is_blocking = False
+    admin_viewer = False
+    if current_user_id:
+        current_user = User.query.get(current_user_id)
+        admin_viewer = current_user.is_admin if current_user else False
+        is_blocking = (
+                UserBlock.query.filter_by(blocker_id=current_user_id, blocked_id=user.user_id).first()
+                is not None
+        )
 
     # OFFER'lar
     user_offers = Offer.query.filter_by(user_id=user_id).all()
@@ -725,7 +813,69 @@ def view_profile(user_id):
             completed_needs=completed_needs,
             comments=comments_with_meta,
             listing_comments=listing_comments,
+            is_blocking=is_blocking,
+            admin_viewer=admin_viewer,
         )
+@app.route("/block/<int:user_id>", methods=["POST"])
+@login_required
+def toggle_block(user_id):
+    me = session["user_id"]
+    if me == user_id:
+        return redirect(request.referrer or url_for("view_profile", user_id=user_id))
+
+    User.query.get_or_404(user_id)
+    existing = UserBlock.query.filter_by(blocker_id=me, blocked_id=user_id).first()
+    if existing:
+        db.session.delete(existing)
+    else:
+        db.session.add(UserBlock(blocker_id=me, blocked_id=user_id))
+
+    db.session.commit()
+    return redirect(request.referrer or url_for("view_profile", user_id=user_id))
+
+
+@app.route("/admin/ban/<int:user_id>", methods=["POST"])
+@admin_required
+def ban_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.is_admin:
+        return "Cannot ban an admin user.", 400
+    user.is_banned = True
+    db.session.commit()
+    return redirect(request.referrer or url_for("view_profile", user_id=user_id))
+
+
+@app.route("/admin/unban/<int:user_id>", methods=["POST"])
+@admin_required
+def unban_user(user_id):
+    user = User.query.get_or_404(user_id)
+    user.is_banned = False
+    db.session.commit()
+    return redirect(request.referrer or url_for("view_profile", user_id=user_id))
+
+
+@app.route("/report/<int:user_id>", methods=["GET", "POST"])
+@login_required
+def report_user(user_id):
+    reporter_id = session["user_id"]
+    reported = User.query.get_or_404(user_id)
+    admin = ensure_admin_user()
+
+    if request.method == "POST":
+        reason = request.form.get("reason", "").strip()
+        if reason:
+            content = f"Report against {reported.email} (ID: {reported.user_id}): {reason}"
+            report_message = Message(
+                sender_id=reporter_id,
+                receiver_id=admin.user_id,
+                content=content,
+            )
+            db.session.add(report_message)
+            db.session.commit()
+            return redirect(url_for("view_profile", user_id=user_id))
+
+    return render_template("report_user.html", reported=reported)
+
 
 @app.route("/toggle-favorite/<int:offer_id>", methods=["POST"])
 def toggle_favorite(offer_id):
@@ -802,6 +952,22 @@ def logout():
     session.clear()
     return redirect(url_for("index"))
 
+def get_chat_listing_context():
+    listing_id = request.args.get("listing_id", type=int) or request.form.get("listing_id", type=int)
+    listing_type = (
+        request.args.get("listing_type")
+        or request.args.get("type")
+        or request.form.get("listing_type")
+        or request.form.get("type")
+    )
+
+    if listing_id and listing_type:
+        session["active_listing_id"] = listing_id
+        session["active_listing_type"] = listing_type
+
+    return session.get("active_listing_id"), session.get("active_listing_type")
+
+
 @app.route("/message/<int:to_user_id>", methods=["GET", "POST"])
 def send_message(to_user_id):
     if "user_id" not in session:
@@ -810,6 +976,8 @@ def send_message(to_user_id):
     my_id = session["user_id"]
     receiver = User.query.get_or_404(to_user_id)
 
+    if is_blocked_between(my_id, to_user_id):
+        return "Messaging is disabled between blocked users.", 403
     # Eğer POST ise mesaj gönder
     if request.method == "POST":
         content = request.form.get("content", "").strip()
@@ -842,6 +1010,8 @@ def chat(user_id):
 
     me = session["user_id"]
     other = user_id
+    if is_blocked_between(me, other):
+        return "Messaging is disabled between blocked users.", 403
 
     listing_id_arg = request.args.get("listing_id")
     listing_type_arg = request.args.get("type")
@@ -987,8 +1157,39 @@ def messages_list():
         .order_by(db.desc("last_time"))
         .all()
     )
+    conversations = [c for c in conversations if not is_blocked_between(my_id, c.other_id)]
 
-    return render_template("messages_list.html", conversations=conversations)
+    enriched_conversations = []
+    for convo in conversations:
+        if convo.listing_type == "offer":
+            listing = Offer.query.get(convo.listing_id)
+        else:
+            listing = Need.query.get(convo.listing_id)
+
+        listing_title = None
+        listing_hours = None
+        listing_location = None
+
+        if listing:
+            listing_title = listing.title
+            listing_hours = listing.hours
+            listing_location = listing.location
+        else:
+            listing_title = f"{convo.listing_type.title()} #{convo.listing_id}"
+
+        enriched_conversations.append({
+            "other_id": convo.other_id,
+            "email": convo.email,
+            "listing_id": convo.listing_id,
+            "listing_type": convo.listing_type,
+            "last_time": convo.last_time,
+            "last_message": convo.last_message,
+            "listing_title": listing_title,
+            "listing_hours": listing_hours,
+            "listing_location": listing_location,
+        })
+
+    return render_template("messages_list.html", conversations=enriched_conversations)
 
 @app.route("/deal/start/<int:other_id>", methods=["POST"])
 @login_required
@@ -998,6 +1199,9 @@ def start_deal(other_id):
 
     starter = User.query.get(session["user_id"])
     receiver = User.query.get(other_id)
+
+    if is_blocked_between(starter.user_id, receiver.user_id):
+        return "Cannot start a deal with a blocked user.", 403
 
     # ---------------------------
     # 1) Form Hours + Date (+ Optional Time)

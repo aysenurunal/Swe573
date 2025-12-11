@@ -8,6 +8,32 @@
 
 <p><strong>Timebank Balance:</strong> {{ user.timebank_balance }} hours</p>
 
+{% if session.get("user_id") and session.get("user_id") != user.user_id %}
+  <div style="display:flex; gap:12px; align-items:center; margin:12px 0; flex-wrap:wrap;">
+    <form action="{{ url_for('toggle_block', user_id=user.user_id) }}" method="POST">
+      <button type="submit" style="padding:8px 12px; border:none; border-radius:8px; cursor:pointer; background:#0ea5e9; color:white; font-weight:700;">
+        {{ 'Unblock user' if is_blocking else 'Block user' }}
+      </button>
+    </form>
+    <a href="{{ url_for('report_user', user_id=user.user_id) }}" style="padding:8px 12px; background:#f97316; color:white; border-radius:8px; text-decoration:none; font-weight:700;">Report to admin</a>
+
+    {% if admin_viewer and not user.is_admin %}
+      <form action="{{ url_for('ban_user', user_id=user.user_id) }}" method="POST" style="margin:0;">
+        <button type="submit" style="padding:8px 12px; border:none; border-radius:8px; cursor:pointer; background:#ef4444; color:white; font-weight:700;">Ban user</button>
+      </form>
+      {% if user.is_banned %}
+        <form action="{{ url_for('unban_user', user_id=user.user_id) }}" method="POST" style="margin:0;">
+          <button type="submit" style="padding:8px 12px; border:none; border-radius:8px; cursor:pointer; background:#22c55e; color:white; font-weight:700;">Unban user</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if user.is_banned %}
+  <p style="color:#ef4444; font-weight:700;">This user is banned.</p>
+{% endif %}
+
 {% if session.get("user_id") == user.user_id %}
   <a href="{{ url_for('logout') }}" style="color:#f43f5e; font-weight:600;">Logout</a>
 {% endif %}
@@ -63,7 +89,7 @@
         {% if listing_comments.get(key) %}
           {% for comment in listing_comments[key] %}
             <div class="comment-bubble">
-              <div class="comment-meta">From: {{ comment.from_email }} — on {{ comment.created_at.strftime('%d.%m.%Y') }}</div>
+              <div class="comment-meta">From {{ comment.from_email|mask_email }} — on {{ comment.created_at.strftime('%d.%m.%Y') }}</div>
               <div class="comment-text">“{{ comment.content }}”</div>
             </div>
           {% endfor %}

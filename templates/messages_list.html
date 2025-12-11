@@ -13,7 +13,11 @@
           <strong>{{ c.email }}</strong><br>
           <span style="opacity:.8;">
             {% if c.listing_type == 'offer' %}🟡 Offer{% else %}🔵 Need{% endif %}
-            #{{ c.listing_id }} — {{ c.last_message }}
+            {{ c.listing_title }}
+            {% if c.listing_hours %}• {{ c.listing_hours }} hours{% endif %}
+            {% if c.listing_location %}— {{ c.listing_location }}{% endif %}
+            <br>
+            <span style="opacity:.7;">{{ c.last_message }}</span>
           </span>
         </div>
         <span style="opacity:.6; font-size:.85rem;">{{ c.last_time }}</span>

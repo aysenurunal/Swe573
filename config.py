@@ -19,3 +19,7 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # SECRET KEY --------------------------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key")
+
+# ADMIN USER --------------------------------------------------
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@thehive.local")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "change-me-now")
