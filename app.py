@@ -870,6 +870,7 @@ def report_user(user_id):
                 sender_id=reporter_id,
                 receiver_id=admin.user_id,
                 content=content,
+                listing_type="report",
             )
             db.session.add(report_message)
             db.session.commit()
@@ -967,6 +968,31 @@ def get_chat_listing_context():
         session["active_listing_type"] = listing_type
 
     return session.get("active_listing_id"), session.get("active_listing_type")
+
+def parse_report_message(content: str):
+    """Extract report metadata from a standard report message string.
+
+    Expected format:
+    "Report against <email> (ID: <user_id>): <reason>"
+    Returns a dictionary with email, user_id, and reason if parsing succeeds,
+    otherwise ``None``.
+    """
+
+    pattern = r"^Report against\s+(.+?)\s+\(ID:\s*(\d+)\):\s*(.+)"
+    match = re.match(pattern, content or "")
+    if not match:
+        return None
+
+    try:
+        user_id = int(match.group(2))
+    except ValueError:
+        return None
+
+    return {
+        "email": match.group(1).strip(),
+        "user_id": user_id,
+        "reason": match.group(3).strip(),
+    }
 
 
 @app.route("/message/<int:to_user_id>", methods=["GET", "POST"])
@@ -1091,13 +1117,18 @@ def chat(user_id):
     ).order_by(Transaction.date.asc()).all()
 
     timeline = []
-    for m in messages:
-        timeline.append({
+
+    def build_message_entry(message_obj):
+        return {
             "type": "message",
-            "timestamp": m.timestamp,
-            "sender_id": m.sender_id,
-            "content": m.content,
-        })
+            "timestamp": message_obj.timestamp,
+            "sender_id": message_obj.sender_id,
+            "content": message_obj.content,
+            "report": parse_report_message(message_obj.content),
+        }
+
+    for m in messages:
+            timeline.append(build_message_entry(m))
     for d in deals:
         timeline.append({
             "type": "deal",
@@ -1164,6 +1195,7 @@ def chat_messages(user_id):
             "receiver_id": msg.receiver_id,
             "content": msg.content,
             "timestamp": msg.timestamp.isoformat(),
+            "report": parse_report_message(msg.content),
         }
 
     if request.method == "POST":
@@ -1223,7 +1255,7 @@ def messages_list():
         (Message.sender_id == my_id, Message.receiver_id),
         else_=Message.sender_id
     )
-    conversations = (
+    chat_conversations = (
         db.session.query(
             other_id.label("other_id"),
             User.email,
@@ -1240,14 +1272,53 @@ def messages_list():
         .order_by(db.desc("last_time"))
         .all()
     )
-    conversations = [c for c in conversations if not is_blocked_between(my_id, c.other_id)]
+    general_conversations = (
+        db.session.query(
+            other_id.label("other_id"),
+            User.email,
+            db.func.max(Message.timestamp).label("last_time"),
+            db.func.max(Message.content).label("last_message"),
+            db.func.max(Message.listing_type).label("listing_type"),
+        )
+        .join(User, User.user_id == other_id)
+        .filter((Message.sender_id == my_id) | (Message.receiver_id == my_id))
+        .filter(Message.listing_id.is_(None))
+        .group_by(other_id, User.email)
+        .order_by(db.desc("last_time"))
+        .all()
+    )
 
-    enriched_conversations = []
-    for convo in conversations:
-        if convo.listing_type == "offer":
-            listing = Offer.query.get(convo.listing_id)
-        else:
-            listing = Need.query.get(convo.listing_id)
+    def build_general_conversation(convo):
+        latest_msg = (
+            Message.query.filter(
+                ((Message.sender_id == my_id) & (Message.receiver_id == convo.other_id))
+                | ((Message.sender_id == convo.other_id) & (Message.receiver_id == my_id))
+            )
+            .filter(Message.listing_id.is_(None))
+            .order_by(Message.timestamp.desc())
+            .first()
+        )
+
+        has_notification = latest_msg and latest_msg.sender_id != my_id
+        return {
+            "other_id": convo.other_id,
+            "email": convo.email,
+            "listing_id": None,
+            "listing_type": convo.listing_type or "general",
+            "last_time": latest_msg.timestamp if latest_msg else convo.last_time,
+            "last_message": convo.last_message,
+            "listing_title": "General conversation",
+            "listing_hours": None,
+            "listing_location": None,
+            "has_notification": bool(has_notification),
+        }
+
+    def build_listing_conversation(convo):
+        listing = (
+            Offer.query.get(convo.listing_id)
+            if convo.listing_type == "offer"
+            else Need.query.get(convo.listing_id)
+        )
 
         listing_title = None
         listing_hours = None
@@ -1259,28 +1330,38 @@ def messages_list():
             listing_location = listing.location
         else:
             listing_title = f"{convo.listing_type.title()} #{convo.listing_id}"
-        latest_msg = Message.query.filter(
-            (
-                    ((Message.sender_id == my_id) & (Message.receiver_id == convo.other_id)) |
-                    ((Message.sender_id == convo.other_id) & (Message.receiver_id == my_id))
+        latest_msg = (
+                Message.query.filter(
+                    (
+                            ((Message.sender_id == my_id) & (Message.receiver_id == convo.other_id))
+                            | ((Message.sender_id == convo.other_id) & (Message.receiver_id == my_id))
+                    )
+                    & (Message.listing_id == convo.listing_id)
+                    & (Message.listing_type == convo.listing_type)
             )
-            &
-            (Message.listing_id == convo.listing_id)
-            &
-            (Message.listing_type == convo.listing_type)
-        ).order_by(Message.timestamp.desc()).first()
+                .order_by(Message.timestamp.desc())
+                .first()
+        )
 
-        latest_deal = Transaction.query.filter(
-            (
-                    (Transaction.starter_id == my_id) & (Transaction.receiver_id == convo.other_id)
-            ) |
-            (
-                    (Transaction.starter_id == convo.other_id) & (Transaction.receiver_id == my_id)
+        latest_deal = (
+            Transaction.query.filter(
+                (
+                        (Transaction.starter_id == my_id)
+                        & (Transaction.receiver_id == convo.other_id)
+                )
+                |
+                (
+                        (Transaction.starter_id == convo.other_id)
+                        & (Transaction.receiver_id == my_id)
+                )
             )
-        ).filter(
-            Transaction.listing_id == convo.listing_id,
-            Transaction.listing_type == convo.listing_type
-        ).order_by(Transaction.date.desc()).first()
+            .filter(
+                Transaction.listing_id == convo.listing_id,
+                Transaction.listing_type == convo.listing_type,
+            )
+            .order_by(Transaction.date.desc())
+            .first()
+        )
 
         latest_event_time = None
         has_notification = False
@@ -1295,7 +1376,7 @@ def messages_list():
 
         last_time = latest_event_time or convo.last_time
 
-        enriched_conversations.append({
+        return{
             "other_id": convo.other_id,
             "email": convo.email,
             "listing_id": convo.listing_id,
@@ -1306,7 +1387,18 @@ def messages_list():
             "listing_hours": listing_hours,
             "listing_location": listing_location,
             "has_notification": has_notification,
-        })
+        }
+
+    enriched_conversations = []
+    for convo in chat_conversations:
+        if not is_blocked_between(my_id, convo.other_id):
+            enriched_conversations.append(build_listing_conversation(convo))
+
+    for convo in general_conversations:
+        if not is_blocked_between(my_id, convo.other_id):
+            enriched_conversations.append(build_general_conversation(convo))
+
+    enriched_conversations.sort(key=lambda c: c["last_time"] or datetime.min, reverse=True)
 
     return render_template("messages_list.html", conversations=enriched_conversations)
 

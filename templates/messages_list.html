@@ -17,13 +17,26 @@
 
 {% if conversations %}
   {% for c in conversations %}
-    <a href="{{ url_for('chat', user_id=c.other_id, listing_id=c.listing_id, type=c.listing_type) }}"
-       style="text-decoration:none; color:#e5e7eb;">
+    {% if c.listing_type in ['offer', 'need'] %}
+      {% set href = url_for('chat', user_id=c.other_id, listing_id=c.listing_id, type=c.listing_type) %}
+    {% else %}
+      {% set href = url_for('send_message', to_user_id=c.other_id) %}
+    {% endif %}
+
+    <a href="{{ href }}" style="text-decoration:none; color:#e5e7eb;">
       <div class="offer-card" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
         <div>
           <strong>{{ c.email }}</strong><br>
           <span style="opacity:.8;">
-            {% if c.listing_type == 'offer' %}🟡 Offer{% else %}🔵 Need{% endif %}
+            {% if c.listing_type == 'offer' %}
+              🟡 Offer
+            {% elif c.listing_type == 'need' %}
+              🔵 Need
+            {% elif c.listing_type == 'report' %}
+              🚩 Report
+            {% else %}
+              ✉️ Direct Message
+            {% endif %}
             {{ c.listing_title }}
             {% if c.listing_hours %}• {{ c.listing_hours }} hours{% endif %}
             {% if c.listing_location %}— {{ c.listing_location }}{% endif %}
