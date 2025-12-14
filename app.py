@@ -28,7 +28,7 @@ import time
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 from requests.exceptions import SSLError
-geolocator = Nominatim(user_agent="the-hive", timeout=3)
+#geolocator = Nominatim(user_agent="the-hive", timeout=3)
 app = Flask(__name__)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
@@ -121,30 +121,19 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def geocode_with_retry(address, attempts=2):
-    """
-    Enhanced geocoding helper with:
-    - Global geolocator reuse (performance)
-    - Reduced attempts (faster)
-    """
+def geocode_with_retry(address, attempts=3, timeout=10):
+    """Best-effort geocoding helper used for creation and on-demand lookups."""
+    geolocator = Nominatim(user_agent="the-hive", timeout=timeout)
 
-    if not address:
-        return None
-
-    # Perform Istanbul-focused query for more consistent results
-    query = address.strip()
     for _ in range(attempts):
         try:
-            # timeout'u burada da ver (daha stabil)
-            loc = geolocator.geocode(query, timeout=10)
-            if loc:
-                return loc
+            return geolocator.geocode(address)
         except (GeocoderTimedOut, GeocoderUnavailable, SSLError):
-            time.sleep(0.8)
+            time.sleep(1)
         except Exception:
             return None
-
     return None
+
 # ---------- DATABASE MODEL ----------
 
 class User(db.Model):
@@ -248,6 +237,15 @@ WIKIDATA_SEARCH_URL = "https://www.wikidata.org/w/api.php"
 WIKIDATA_ENTITY_URL = "https://www.wikidata.org/w/api.php"
 WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
 
+USER_AGENT = "TheHiveServiceApp/1.0 (community-timebank; contact=youremail@example.com)"
+HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json",
+}
+SPARQL_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/sparql-results+json",
+}
 
 def _collect_entity_labels(entity):
     labels = set()
@@ -261,10 +259,67 @@ def _collect_entity_labels(entity):
             value = item.get("value")
             if value:
                 labels.add(value)
+    # Keep description but VERY conservatively: only add phrases, not single generic tokens
     description = entity.get("descriptions", {}).get("en", {}).get("value")
     if description:
-        labels.update(re.split(r"[,;]+| and | or ", description))
+        parts = re.split(r"[,;]+", description)
+        for p in parts:
+            p = p.strip()
+            # drop very short / generic parts
+            if len(p) >= 8:
+                labels.add(p)
+
     return {label.strip().lower() for label in labels if label and len(label.strip()) >= 3}
+
+def _choose_best_search_hit(search_results, search_term):
+    """
+    Pick a better Wikidata entity than always taking the first result.
+    Filters out non-conceptual / media / brand / platform-ish entities.
+    """
+    if not search_results:
+        return None
+
+    skip_keywords = [
+        "database", "website", "software", "company", "organization",
+        "web service", "online", "application", "platform", "record label",
+        "brand", "corporation", "enterprise", "firm", "business",
+        "video game", "film", "movie", "album", "song", "television", "tv series",
+        "band", "musical"
+    ]
+
+    search_lower = (search_term or "").strip().lower()
+
+    # 1) Exact label match first (and not skipped)
+    for hit in search_results:
+        label = (hit.get("label") or "").strip().lower()
+        desc = (hit.get("description") or "").strip().lower()
+        if any(k in desc for k in skip_keywords):
+            continue
+        if label == search_lower:
+            return hit
+
+    # 2) If single-word query, prefer single-word labels
+    is_single_word = len(search_lower.split()) == 1
+    if is_single_word:
+        for hit in search_results:
+            label = (hit.get("label") or "").strip().lower()
+            desc = (hit.get("description") or "").strip().lower()
+            if any(k in desc for k in skip_keywords):
+                continue
+            if label and len(label.split()) == 1 and (search_lower in label):
+                return hit
+
+    # 3) Otherwise, prefer label contains query (and not skipped)
+    for hit in search_results:
+        label = (hit.get("label") or "").strip().lower()
+        desc = (hit.get("description") or "").strip().lower()
+        if any(k in desc for k in skip_keywords):
+            continue
+        if search_lower and label and (search_lower in label):
+            return hit
+
+    # 4) Fallback: first hit
+    return search_results[0]
 
 
 def _collect_related_entity_ids(claims, properties):
@@ -281,30 +336,40 @@ def _collect_related_entity_ids(claims, properties):
     return related_ids
 
 
-def _fetch_related_labels_via_sparql(entity_id, max_items=15):
+def _fetch_related_labels_via_sparql(entity_id, max_items=20):
     """Fetch broader/narrower labels connected to an entity via SPARQL."""
     if not entity_id:
         return set()
 
     query = f"""
-    SELECT DISTINCT ?label WHERE {{
-      VALUES ?target {{ wd:{entity_id} }}
-      {{ ?item wdt:P279* ?target . }}
-      UNION {{ ?item wdt:P361* ?target . }}
-      UNION {{ ?target wdt:P527* ?item . }}
-      UNION {{ ?item wdt:P527* ?target . }}
-      ?item rdfs:label ?label .
-      FILTER(LANG(?label) IN ("en", "tr"))
-    }}
-    LIMIT {max_items}
-    """
+        SELECT DISTINCT ?label WHERE {{
+          VALUES ?target {{ wd:{entity_id} }}
+
+          # Ontology / structure
+          {{ ?item wdt:P279* ?target . }}        # subclass chain (narrower-ish)
+          UNION {{ ?target wdt:P279* ?item . }}  # broader-ish
+          UNION {{ ?item wdt:P361* ?target . }}  # part of chain
+          UNION {{ ?target wdt:P361* ?item . }}
+          UNION {{ ?target wdt:P527* ?item . }}  # has part chain
+          UNION {{ ?item wdt:P527* ?target . }}
+
+          # Service-oriented relations (from your earlier version)
+          UNION {{ ?item wdt:P366 wd:{entity_id} . }}   # "use" (tools / used-for)
+          UNION {{ wd:{entity_id} wdt:P3095 ?item . }}  # practiced by (roles)
+          UNION {{ wd:{entity_id} wdt:P1056 ?item . }}  # product produced
+
+          ?item rdfs:label ?label .
+          FILTER(LANG(?label) IN ("en", "tr"))
+        }}
+        LIMIT {max_items}
+        """
 
     try:
         response = requests.get(
             WIKIDATA_SPARQL_URL,
             params={"query": query, "format": "json"},
-            headers={"Accept": "application/sparql-results+json"},
-            timeout=6,
+            headers=SPARQL_HEADERS,
+            timeout=8,
         )
         response.raise_for_status()
         data = response.json()
@@ -350,6 +415,7 @@ def _fetch_entity_labels(entity_ids):
                 "languages": "en|tr",
                 "props": "labels|aliases|descriptions",
             },
+            headers=HEADERS,
             timeout=5,
         )
         response.raise_for_status()
@@ -378,16 +444,17 @@ def fetch_wikidata_semantic_terms(query):
                 "search": query,
                 "language": "en",
                 "format": "json",
-                "limit": 3,
+                "limit": 5,
             },
-            timeout=5,
+            headers=HEADERS,
+            timeout=6,
         )
         search_response.raise_for_status()
         search_results = search_response.json().get("search", [])
         if not search_results:
             return terms or {query.lower()}
 
-        top_hit = search_results[0]
+        top_hit = _choose_best_search_hit(search_results, query)
         entity_id = top_hit.get("id")
         if not entity_id:
             return terms or {query.lower()}
@@ -401,6 +468,7 @@ def fetch_wikidata_semantic_terms(query):
                 "languages": "en|tr",
                 "props": "labels|aliases|descriptions|claims",
             },
+            headers=HEADERS,
             timeout=5,
         )
         entity_response.raise_for_status()
@@ -408,7 +476,10 @@ def fetch_wikidata_semantic_terms(query):
         terms.update(_collect_entity_labels(entity))
 
         claims = entity.get("claims", {})
-        related_ids = _collect_related_entity_ids(claims, ["P279", "P31", "P361", "P527"])
+        related_ids = _collect_related_entity_ids(
+            claims,
+            ["P279", "P31", "P361", "P527", "P366", "P3095", "P1056"],
+        )
         terms.update(_fetch_entity_labels(related_ids))
         terms.update(_fetch_related_labels_via_sparql(entity_id))
         terms.add(query.lower())
@@ -450,6 +521,11 @@ def index():
 
     if query:
         terms = fetch_wikidata_semantic_terms(query)
+        # Cap for performance: keep query + up to 30 other terms
+        terms = list(terms)
+        terms = [t for t in terms if t != query.lower()]
+        terms = [query.lower()] + terms[:30]
+        terms = set(terms)
         offer_filter = build_listing_filter(Offer, terms)
         need_filter = build_listing_filter(Need, terms)
 
@@ -466,6 +542,7 @@ def index():
     else:
         offers = Offer.query.filter_by(is_active=True).all()
         needs = Need.query.filter_by(is_active=True).all()
+
     user_favorites = set()
     user_need_favorites = set()
     if "user_id" in session:
