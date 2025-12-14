@@ -751,6 +751,71 @@ def add_forum_comment(post_id):
     db.session.commit()
 
     return redirect(url_for("forum_index"))
+
+@app.route("/forum/<int:post_id>/edit", methods=["POST"])
+@login_required
+def edit_forum_post(post_id):
+    post = ForumPost.query.get_or_404(post_id)
+
+    if post.user_id != session["user_id"]:
+        abort(403)
+
+    title = request.form.get("title", "").strip()
+    content = request.form.get("content", "").strip()
+
+    if not title or not content:
+        return "Title and content are required", 400
+
+    post.title = title
+    post.content = content
+    db.session.commit()
+
+    return redirect(url_for("forum_index"))
+
+@app.route("/forum/<int:post_id>/delete", methods=["POST"])
+@login_required
+def delete_forum_post(post_id):
+    post = ForumPost.query.get_or_404(post_id)
+
+    if post.user_id != session["user_id"]:
+        abort(403)
+
+    db.session.delete(post)
+    db.session.commit()
+
+    return redirect(url_for("forum_index"))
+
+
+@app.route("/forum/comment/<int:comment_id>/edit", methods=["POST"])
+@login_required
+def edit_forum_comment(comment_id):
+    comment = ForumComment.query.get_or_404(comment_id)
+
+    if comment.user_id != session["user_id"]:
+        abort(403)
+
+    content = request.form.get("content", "").strip()
+    if not content:
+        return "Comment content is required", 400
+
+    comment.content = content
+    db.session.commit()
+
+    return redirect(url_for("forum_index"))
+
+
+@app.route("/forum/comment/<int:comment_id>/delete", methods=["POST"])
+@login_required
+def delete_forum_comment(comment_id):
+    comment = ForumComment.query.get_or_404(comment_id)
+
+    if comment.user_id != session["user_id"]:
+        abort(403)
+
+    db.session.delete(comment)
+    db.session.commit()
+
+    return redirect(url_for("forum_index"))
 @app.route("/add-need", methods=["GET", "POST"])
 @login_required
 def add_need():
