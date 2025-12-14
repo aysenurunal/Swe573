@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}Community Forum | The Hive{% endblock %}
+{% block content %}
+<header>Community Forum</header>
+<main>
+  <section class="section-card">
+    <h2>Latest discussions</h2>
+    {% if session.get('user_id') %}
+      <form action="{{ url_for('create_forum_post') }}" method="post" class="forum-form">
+        <label class="form-label" for="title">Title</label>
+        <input id="title" name="title" type="text" required>
+        <label class="form-label" for="content">Content</label>
+        <textarea id="content" name="content" rows="3" required></textarea>
+        <button type="submit" class="btn-msg">Start thread</button>
+      </form>
+    {% else %}
+      <p>Please <a href="{{ url_for('login') }}">sign in</a> to start a new discussion.</p>
+    {% endif %}
+  </section>
+
+  {% for post in posts %}
+    <article class="section-card">
+      <h3>{{ post.title }}</h3>
+      <p class="post-meta">Posted by {{ post.author.email|mask_email }} on {{ post.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+      <p>{{ post.content }}</p>
+
+      <div class="comments">
+        <h4>Comments ({{ post.comments|length }})</h4>
+        {% for comment in post.comments %}
+          <div class="comment">
+            <div class="comment-meta">{{ comment.author.email|mask_email }} — {{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+            <div class="comment-body">{{ comment.content }}</div>
+          </div>
+        {% else %}
+          <p class="muted">No comments yet.</p>
+        {% endfor %}
+      </div>
+
+      {% if session.get('user_id') %}
+        <form action="{{ url_for('add_forum_comment', post_id=post.id) }}" method="post" class="comment-form">
+          <label class="form-label" for="comment-{{ post.id }}">Add a comment</label>
+          <textarea id="comment-{{ post.id }}" name="content" rows="2" required></textarea>
+          <button type="submit" class="btn-msg">Comment</button>
+        </form>
+      {% else %}
+        <p class="muted">Sign in to join the conversation.</p>
+      {% endif %}
+    </article>
+  {% else %}
+    <section class="section-card">
+      <p>No posts yet. Be the first to start a discussion!</p>
+    </section>
+  {% endfor %}
+</main>
+<style>
+  .section-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 18px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.06);
+  }
+  .forum-form input,
+  .forum-form textarea,
+  .comment-form textarea {
+    width: 100%;
+    margin: 6px 0 12px;
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+  }
+  .post-meta,
+  .comment-meta,
+  .muted {
+    color: #6b7280;
+    font-size: 0.9rem;
+  }
+  .comments {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .comment {
+    padding: 8px 0;
+  }
+  .comment-body {
+    margin-top: 4px;
+  }
+</style>
+{% endblock %}

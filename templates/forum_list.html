@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Forum{% endblock %}
+{% block content %}
+<div class="forum-page">
+  <section class="forum-hero">
+    <h1>Community Forum</h1>
+    <p>Paylaşın, öneri alın ve topluluktan destek isteyin.</p>
+  </section>
+
+  <section class="new-post-card">
+    <h2>Yeni Gönderi</h2>
+    <form method="post" action="/forum" class="form-grid">
+      <input type="text" name="title" placeholder="Başlık" value="{{ request.form.title or '' }}" required>
+      <textarea name="content" placeholder="Düşüncelerinizi paylaşın" required>{{ request.form.content or '' }}</textarea>
+      <button type="submit" class="btn-primary">Yayınla</button>
+    </form>
+  </section>
+
+  <section class="post-list">
+    {% for post in posts %}
+      <article class="post-card">
+        <div class="post-meta">
+          <span class="badge">Gönderi</span>
+          <span>{{ post.author_name or 'Anonim' }}</span>
+          <span class="muted-text">{{ post.created_at or '' }}</span>
+        </div>
+        <div class="post-title">
+          <a href="/forum/{{ post.id }}">{{ post.title }}</a>
+        </div>
+        {% if post.content %}
+          <p class="muted-text">{{ post.content | truncate(200, True, '...') }}</p>
+        {% endif %}
+        <div class="like-row">
+          <form method="post" action="/forum/{{ post.id }}/like">
+            <button type="submit" class="like-btn">❤️ Beğen</button>
+          </form>
+          <span class="like-count">{{ post.likes or 0 }} beğeni</span>
+          <a class="muted-text" href="/forum/{{ post.id }}">{{ post.comment_count or (post.comments|length if post.comments is defined else 0) }} yorum</a>
+        </div>
+      </article>
+    {% else %}
+      <p class="muted-text">Henüz gönderi yok.</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

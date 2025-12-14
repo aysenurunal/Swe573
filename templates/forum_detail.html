@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% macro render_comment(comment, post_id) %}
+  <div class="comment-card">
+    <div class="comment-avatar">{{ (comment.author_name[:1] if comment.author_name else 'U')|upper }}</div>
+    <div class="comment-body">
+      <div class="comment-header">
+        <span class="comment-author">{{ comment.author_name or 'Anonim' }}</span>
+        <span class="comment-time">{{ comment.created_at or '' }}</span>
+      </div>
+      <div class="comment-text">{{ comment.content }}</div>
+      <div class="comment-actions">
+        <form method="post" action="/forum/{{ post_id }}/comments/{{ comment.id }}/like">
+          <button type="submit" class="like-btn">❤️</button>
+        </form>
+        <span class="like-count">{{ comment.likes or 0 }} beğeni</span>
+        <button type="button" class="reply-btn" onclick="document.getElementById('reply-to-{{ comment.id }}').classList.toggle('hidden');">↩ Yanıtla</button>
+      </div>
+      <form id="reply-to-{{ comment.id }}" class="inline-form hidden" method="post" action="/forum/{{ post_id }}/comments/{{ comment.id }}/reply">
+        <textarea name="content" placeholder="Yanıt yazın" required></textarea>
+        <button type="submit" class="btn-primary">Gönder</button>
+      </form>
+      {% if comment.replies %}
+        <div class="reply-thread">
+          {% for child in comment.replies %}
+            {{ render_comment(child, post_id) }}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}
+{% block title %}{{ post.title if post else 'Forum' }}{% endblock %}
+{% block content %}
+<div class="forum-page">
+  <article class="post-card">
+    <div class="post-meta">
+      <span class="badge">Gönderi</span>
+      <span>{{ post.author_name or 'Anonim' }}</span>
+      <span class="muted-text">{{ post.created_at or '' }}</span>
+    </div>
+    <h1 class="post-title">{{ post.title }}</h1>
+    <p class="muted-text">{{ post.content }}</p>
+    <div class="like-row">
+      <form method="post" action="/forum/{{ post.id }}/like">
+        <button type="submit" class="like-btn">❤️ Beğen</button>
+      </form>
+      <span class="like-count">{{ post.likes or 0 }} beğeni</span>
+      <span class="muted-text">{{ comments|length }} yorum</span>
+    </div>
+  </article>
+
+  <section class="comment-section">
+    <div class="comment-composer">
+      <h3>Yorum Yap</h3>
+      <form method="post" action="/forum/{{ post.id }}/comments" class="form-grid">
+        <textarea name="content" placeholder="Görüşünüzü yazın" required></textarea>
+        <button type="submit" class="btn-primary">Paylaş</button>
+      </form>
+    </div>
+
+    <div class="comment-list">
+      {% for comment in comments %}
+        {{ render_comment(comment, post.id) }}
+      {% else %}
+        <p class="muted-text">İlk yorumu sen yaz.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}
