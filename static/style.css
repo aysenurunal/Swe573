@@ -199,6 +199,46 @@
   color: #6b7280;
 }
 
+.post-actions {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.profile-link {
+  color: #2563eb;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.profile-link:hover {
+  text-decoration: underline;
+}
+
+.inline-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.empty-card {
+  text-align: center;
+  padding: 18px;
+}
+
+
 .badge {
   display: inline-block;
   padding: 4px 10px;

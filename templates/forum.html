@@ -1,199 +1,124 @@
 {% extends 'base.html' %}
 {% block title %}Community Forum | The Hive{% endblock %}
 {% block content %}
-<header>Community Forum</header>
-<main>
-  <section class="section-card">
+
+<div class="forum-page">
+  <section class="forum-hero">
+    <h1>Community Forum</h1>
+    <p>Share your ideas, ask for help, and connect with your neighbors.</p>
+  </section>
+
+  <section class="new-post-card">
     <h2>Latest discussions</h2>
     {% if session.get('user_id') %}
-      <form action="{{ url_for('create_forum_post') }}" method="post" class="forum-form">
-        <label class="form-label" for="title">Title</label>
+      <form action="{{ url_for('create_forum_post') }}" method="post" class="form-grid">
+        <label for="title">Title</label>
         <input id="title" name="title" type="text" required>
-        <label class="form-label" for="content">Content</label>
+
+        <label for="content">Content</label>
         <textarea id="content" name="content" rows="3" required></textarea>
-        <button type="submit" class="btn-msg">Start thread</button>
+
+        <button type="submit" class="btn-primary">Start thread</button>
       </form>
     {% else %}
-      <p>Please <a href="{{ url_for('login') }}">sign in</a> to start a new discussion.</p>
+      <p class="muted-text">Please <a href="{{ url_for('login') }}">sign in</a> to start a new discussion.</p>
     {% endif %}
   </section>
 
   {% for post in posts %}
-    <article class="section-card">
-      <h3>{{ post.title }}</h3>
-      <p class="post-meta">
-        Posted by
-        <a class="profile-link" href="{{ url_for('view_profile', user_id=post.author.user_id) }}">{{ post.author.email }}</a>
-        on {{ post.created_at.strftime('%d.%m.%Y %H:%M') }}
-      </p>
+    <article class="post-card">
+      <div class="post-title">
+        <a href="{{ url_for('view_profile', user_id=post.author.user_id) }}">{{ post.title }}</a>
+      </div>
+
+      <div class="post-meta">
+        <span>
+          Posted by
+          <a class="profile-link" href="{{ url_for('view_profile', user_id=post.author.user_id) }}">
+            {{ post.author.email }}
+          </a>
+        </span>
+        <span>{{ post.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+      </div>
+
       <p>{{ post.content }}</p>
 
       {% if session.get('user_id') == post.author.user_id %}
-        <div class="post-actions">
+        <div class="comment-actions post-actions">
           <details class="edit-card">
             <summary>Edit post</summary>
             <form action="{{ url_for('edit_forum_post', post_id=post.id) }}" method="post" class="inline-form">
-              <label class="form-label" for="title-{{ post.id }}">Title</label>
+              <label for="title-{{ post.id }}">Title</label>
               <input id="title-{{ post.id }}" name="title" type="text" value="{{ post.title }}" required>
-              <label class="form-label" for="content-{{ post.id }}">Content</label>
+
+              <label for="content-{{ post.id }}">Content</label>
               <textarea id="content-{{ post.id }}" name="content" rows="3" required>{{ post.content }}</textarea>
+
               <button type="submit" class="btn-secondary">Save changes</button>
             </form>
           </details>
+
           <form action="{{ url_for('delete_forum_post', post_id=post.id) }}" method="post" class="inline-form">
             <button type="submit" class="btn-danger">Delete post</button>
           </form>
         </div>
       {% endif %}
 
-      <div class="comments">
+      <div class="comment-section">
         <h4>Comments ({{ post.comments|length }})</h4>
-        {% for comment in post.comments %}
-          <div class="comment">
-            <div class="comment-meta">
-              <a class="profile-link" href="{{ url_for('view_profile', user_id=comment.author.user_id) }}">{{ comment.author.email }}</a>
-              — {{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}
-            </div>
-            <div class="comment-body">{{ comment.content }}</div>
 
-            {% if session.get('user_id') == comment.author.user_id %}
-              <div class="comment-actions">
-                <details class="edit-card inline-details">
-                  <summary>Edit</summary>
-                  <form action="{{ url_for('edit_forum_comment', comment_id=comment.id) }}" method="post" class="inline-form">
-                    <label class="visually-hidden" for="comment-edit-{{ comment.id }}">Edit comment</label>
-                    <textarea id="comment-edit-{{ comment.id }}" name="content" rows="2" required>{{ comment.content }}</textarea>
-                    <button type="submit" class="btn-secondary">Save</button>
-                  </form>
-                </details>
-                <form action="{{ url_for('delete_forum_comment', comment_id=comment.id) }}" method="post" class="inline-form">
-                  <button type="submit" class="btn-danger" aria-label="Delete comment">Delete</button>
-                </form>
+        <div class="comment-list">
+          {% for comment in post.comments %}
+            <div class="comment-card">
+              <div class="comment-body">
+                <div class="comment-header">
+                  <a class="profile-link" href="{{ url_for('view_profile', user_id=comment.author.user_id) }}">
+                    {{ comment.author.email }}
+                  </a>
+                  <span class="comment-time">{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                </div>
+
+                <div>{{ comment.content }}</div>
+
+                {% if session.get('user_id') == comment.author.user_id %}
+                  <div class="comment-actions">
+                    <details class="inline-details">
+                      <summary>Edit</summary>
+                      <form action="{{ url_for('edit_forum_comment', comment_id=comment.id) }}" method="post" class="inline-form">
+                        <label class="visually-hidden" for="comment-edit-{{ comment.id }}">Edit comment</label>
+                        <textarea id="comment-edit-{{ comment.id }}" name="content" rows="2" required>{{ comment.content }}</textarea>
+                        <button type="submit" class="btn-secondary">Save</button>
+                      </form>
+                    </details>
+
+                    <form action="{{ url_for('delete_forum_comment', comment_id=comment.id) }}" method="post" class="inline-form">
+                      <button type="submit" class="btn-danger" aria-label="Delete comment">Delete</button>
+                    </form>
+                  </div>
+                {% endif %}
               </div>
-            {% endif %}
-          </div>
-        {% else %}
-          <p class="muted">No comments yet.</p>
-        {% endfor %}
-      </div>
+            </div>
+          {% else %}
+            <p class="muted">No comments yet.</p>
+          {% endfor %}
+        </div>
 
-      {% if session.get('user_id') %}
-        <form action="{{ url_for('add_forum_comment', post_id=post.id) }}" method="post" class="comment-form">
-          <label class="form-label" for="comment-{{ post.id }}">Add a comment</label>
-          <textarea id="comment-{{ post.id }}" name="content" rows="2" required></textarea>
-          <button type="submit" class="btn-msg">Comment</button>
-        </form>
-      {% else %}
-        <p class="muted">Sign in to join the conversation.</p>
-      {% endif %}
+        {% if session.get('user_id') %}
+          <form action="{{ url_for('add_forum_comment', post_id=post.id) }}" method="post" class="comment-composer">
+            <label for="comment-{{ post.id }}">Add a comment</label>
+            <textarea id="comment-{{ post.id }}" name="content" rows="2" required></textarea>
+            <button type="submit" class="btn-msg">Comment</button>
+          </form>
+        {% else %}
+          <p class="muted-text">Sign in to join the conversation.</p>
+        {% endif %}
+      </div>
     </article>
   {% else %}
-    <section class="section-card">
-      <p>No posts yet. Be the first to start a discussion!</p>
+    <section class="post-card empty-card">
+      <p class="muted-text">No posts yet. Be the first to start a discussion!</p>
     </section>
   {% endfor %}
-</main>
-<style>
-  .section-card {
-    background: #ffffff;
-@@ -65,27 +106,100 @@
-  .forum-form textarea,
-  .comment-form textarea {
-    width: 100%;
-    margin: 6px 0 12px;
-    padding: 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-  }
-  .post-meta,
-  .comment-meta,
-  .muted {
-    color: #6b7280;
-    font-size: 0.9rem;
-  }
-  .comments {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid #e5e7eb;
-  }
-  .comment {
-    padding: 8px 0;
-  }
-  .comment-body {
-    margin-top: 4px;
-  }
-  .profile-link {
-    color: #2563eb;
-    font-weight: 600;
-    text-decoration: none;
-  }
-  .profile-link:hover {
-    text-decoration: underline;
-  }
-  .edit-card {
-    margin-top: 10px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 8px 10px;
-    background: #f9fafb;
-  }
-  .edit-card summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: #374151;
-  }
-  .inline-form {
-    margin-top: 8px;
-  }
-  .btn-secondary {
-    background: #10b981;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 12px;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .btn-secondary:hover {
-    background: #059669;
-  }
-  .btn-danger {
-    background: #ef4444;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 12px;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .btn-danger:hover {
-    background: #dc2626;
-  }
-  .comment-actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-top: 6px;
-  }
-  .post-actions {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    margin-top: 10px;
-  }
-  .inline-details {
-    flex: 1;
-  }
-  .visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-</style>
+</div>
+
 {% endblock %}
