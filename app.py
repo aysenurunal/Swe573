@@ -3,12 +3,14 @@
 from flask import (
     Flask,
     jsonify,
+    flash,
     render_template,
     request,
     redirect,
     session,
     url_for,
     send_from_directory,
+    abort,
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
@@ -57,7 +59,6 @@ def enforce_ban():
         return render_template("login.html", error="Your account has been banned."), 403
 
 from functools import wraps
-from flask import redirect, session, url_for
 
 def login_required(f):
     @wraps(f)
@@ -143,10 +144,17 @@ class User(db.Model):
     timebank_balance = db.Column(db.Integer, default=3)
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
+
     offers = db.relationship("Offer", backref="user", lazy=True)
     needs = db.relationship("Need", backref="user", lazy=True)
     favorites = db.relationship("Favorite", backref="user", lazy=True)
     need_favorites = db.relationship("NeedFavorite", backref="user", lazy=True)
+
+    forum_posts = db.relationship("ForumPost", backref="author", lazy=True)
+    forum_comments = db.relationship("ForumComment", backref="author", lazy=True)
+
+    forum_comment_likes = db.relationship("ForumCommentLike", backref="user", lazy=True, cascade="all, delete-orphan")
+
 
 class UserBlock(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -230,6 +238,44 @@ class Comment(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class ForumPost(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    comments = db.relationship(
+        "ForumComment",
+        backref="post",
+        cascade="all, delete-orphan",
+        lazy=True
+    )
+
+
+class ForumComment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey("forum_post.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    likes = db.relationship(
+        "ForumCommentLike",
+        backref="comment",
+        cascade="all, delete-orphan",
+        lazy=True
+    )
+
+class ForumCommentLike(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey("forum_comment.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("comment_id", "user_id", name="uq_forum_comment_like"),
+    )
 
 # ---------- SEARCH & SEMANTIC HELPERS ----------
 
@@ -667,7 +713,44 @@ def favorites_page():
         fav_need_ids=fav_need_ids,
     )
 
+@app.route("/forum")
+def forum_index():
+    posts = ForumPost.query.order_by(ForumPost.created_at.desc()).all()
+    return render_template("forum.html", posts=posts)
 
+
+@app.route("/forum", methods=["POST"])
+@login_required
+def create_forum_post():
+    title = request.form.get("title", "").strip()
+    content = request.form.get("content", "").strip()
+
+    if not title or not content:
+        return "Title and content are required", 400
+
+    post = ForumPost(user_id=session["user_id"], title=title, content=content)
+    db.session.add(post)
+    db.session.commit()
+
+    return redirect(url_for("forum_index"))
+
+
+@app.route("/forum/<int:post_id>/comment", methods=["POST"])
+@login_required
+def add_forum_comment(post_id):
+    content = request.form.get("content", "").strip()
+    if not content:
+        return "Comment content is required", 400
+
+    post = ForumPost.query.get(post_id)
+    if not post:
+        abort(404)
+
+    comment = ForumComment(post_id=post.id, user_id=session["user_id"], content=content)
+    db.session.add(comment)
+    db.session.commit()
+
+    return redirect(url_for("forum_index"))
 @app.route("/add-need", methods=["GET", "POST"])
 @login_required
 def add_need():

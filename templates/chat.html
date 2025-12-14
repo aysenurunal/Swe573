@@ -576,20 +576,32 @@ document.addEventListener('DOMContentLoaded', () => {
       listing_type: listingType
     });
 
-    const res = await fetch(`/chat/${otherUserId}/messages?${params.toString()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text })
-    });
+    try {
+      const res = await fetch(`/chat/${otherUserId}/messages?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.message) {
-        addMessageBubble(data.message);
-        lastTimestamp = data.message.timestamp;
-        scrollTimelineToBottom();
-      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.message) {
+          addMessageBubble(data.message);
+          lastTimestamp = data.message.timestamp;
+          scrollTimelineToBottom();
+        }
+      } else {
+        let errorText = 'Message could not be sent.';
+        try {
+          const data = await res.json();
+          if (data.error) errorText = data.error;
+        } catch (err) {
+          /* ignore json parse errors */
+        }
+        showToast(errorText);
     }
+      } catch (err) {
+      showToast('Network error while sending message.');
   }
 
   async function pollMessages() {

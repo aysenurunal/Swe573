@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>{% block title %}The Hive{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <style>
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -31,6 +31,25 @@
       padding:0 16px;
         padding-bottom:120px;
     }
+    .flash-container {
+      max-width:900px;
+      margin:16px auto 0;
+      padding:0 16px;
+    }
+
+    .flash {
+      padding:12px 14px;
+      border-radius:10px;
+      margin-bottom:10px;
+      font-weight:600;
+      border:1px solid #d1d5db;
+      background:#ecfeff;
+      color:#0f172a;
+      box-shadow:0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    .flash-error { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+    .flash-success { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
 
     /* ---------------------- SEARCH BAR ---------------------- */
     .search-bar {
@@ -239,6 +258,16 @@
   The Hive
 </header>
 
+{% with messages = get_flashed_messages(with_categories=True) %}
+  {% if messages %}
+    <div class="flash-container">
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category|default('info') }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
 <main>
   {% block content %}{% endblock %}
 </main>
@@ -247,6 +276,7 @@
   <a href="{{ url_for('index') }}">Main Page</a>
   <a href="{{ url_for('needs_page') }}">Needs</a>
   <a href="{{ url_for('offers_page') }}">Offers</a>
+    <a href="/forum">Forum</a>
   <a href="{{ url_for('favorites_page') }}">Favs</a>
   <a href="{{ url_for('messages_list') }}">Messages</a>
   <a href="{{ url_for('my_profile') }}">My Profile</a>
