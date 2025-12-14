@@ -509,6 +509,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const meta = document.createElement('div');
     meta.className = 'msg-meta';
+    meta.textContent = formatTimestamp(msg.timestamp);
+
+    const text = document.createElement('div');
+    text.className = 'msg-text';
 
     const parsedReport = msg.report || parseReportLocally(msg.content);
 
@@ -522,22 +526,6 @@ document.addEventListener('DOMContentLoaded', () => {
       text.appendChild(reportLink);
 
       text.appendChild(document.createTextNode(` (ID: ${parsedReport.user_id}): ${parsedReport.reason}`));
-    } else {
-      text.textContent = msg.content;
-    }
-
-    const text = document.createElement('div');
-    text.className = 'msg-text';
-    if (msg.report) {
-      text.appendChild(document.createTextNode('Report against '));
-
-      const reportLink = document.createElement('a');
-      reportLink.href = `/profile/${msg.report.user_id}`;
-      reportLink.className = 'report-link';
-      reportLink.textContent = msg.report.email;
-      text.appendChild(reportLink);
-
-      text.appendChild(document.createTextNode(` (ID: ${msg.report.user_id}): ${msg.report.reason}`));
     } else {
       text.textContent = msg.content;
     }

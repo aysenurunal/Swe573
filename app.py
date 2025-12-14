@@ -124,7 +124,6 @@ def allowed_file(filename):
 def geocode_with_retry(address, attempts=2):
     """
     Enhanced geocoding helper with:
-    - Istanbul fallback
     - Global geolocator reuse (performance)
     - Reduced attempts (faster)
     """
@@ -133,14 +132,15 @@ def geocode_with_retry(address, attempts=2):
         return None
 
     # Perform Istanbul-focused query for more consistent results
-    query = f"{address}, Istanbul, Turkey"
-
+    query = address.strip()
     for _ in range(attempts):
         try:
-            loc = geolocator.geocode(query)
-            return loc
+            # timeout'u burada da ver (daha stabil)
+            loc = geolocator.geocode(query, timeout=10)
+            if loc:
+                return loc
         except (GeocoderTimedOut, GeocoderUnavailable, SSLError):
-            time.sleep(0.7)   # shorter sleep = faster experience
+            time.sleep(0.8)
         except Exception:
             return None
 
@@ -605,17 +605,10 @@ def add_need():
         # RAW USER LOCATION (strip kullanıyoruz — capitalize yok)
         location_input = request.form["location"].strip()
 
-        # GEOCODE QUERY (İstanbul odaklı)
-        query = f"{location_input}, Istanbul, Turkey"
-
-        # GEOCODING
-        try:
-            loc = geolocator.geocode(query, timeout=3)
-            lat = loc.latitude if loc else None
-            lon = loc.longitude if loc else None
-        except:
-            lat = None
-            lon = None
+        # worldwide geocode (Istanbul zorlaması KALDIR)
+        loc = geocode_with_retry(location_input)
+        lat = loc.latitude if loc else None
+        lon = loc.longitude if loc else None
 
         # IMAGE HANDLING
         image_filename = None
@@ -661,7 +654,7 @@ def add_offer():
         title = request.form["title"]
         description = request.form["description"]
         hours = int(request.form["hours"])
-        location = request.form["location"].capitalize()
+        location = request.form["location"].strip()
 
         loc = geocode_with_retry(location)
         lat = loc.latitude if loc else None
@@ -916,6 +909,23 @@ def uploaded_file(filename):
 @app.route("/offer/<int:offer_id>")
 def offer_detail(offer_id):
     offer = Offer.query.get_or_404(offer_id)
+    if offer.location and (offer.latitude is None or offer.longitude is None):
+        candidates = [
+            offer.location,  # kullanıcı ne girdiyse
+            f"{offer.location}, city",  # belirsizse biraz genelle
+            f"{offer.location}, country",  # daha da genelle
+        ]
+
+        loc = None
+        for q in candidates:
+            loc = geocode_with_retry(q)
+            if loc:
+                break
+
+        if loc:
+            offer.latitude = loc.latitude
+            offer.longitude = loc.longitude
+            db.session.commit()
 
     user_favorites = set()
     if "user_id" in session:
@@ -933,11 +943,24 @@ def need_detail(need_id):
     need = Need.query.get_or_404(need_id)
 
     if need.location and (need.latitude is None or need.longitude is None):
-        loc = geocode_with_retry(need.location)
+        candidates = [
+            need.location,
+            f"{need.location}, city",
+            f"{need.location}, country",
+        ]
+
+        loc = None
+        for q in candidates:
+            loc = geocode_with_retry(q)
+            if loc:
+                break
+
         if loc:
             need.latitude = loc.latitude
             need.longitude = loc.longitude
             db.session.commit()
+
+
     user_need_favorites = set()
     if "user_id" in session:
         favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()
@@ -975,11 +998,15 @@ def parse_report_message(content: str):
     Expected format:
     "Report against <email> (ID: <user_id>): <reason>"
     Returns a dictionary with email, user_id, and reason if parsing succeeds,
-    otherwise ``None``.
+    otherwise ``None``. The parser is intentionally forgiving to account for
+    missing spaces or minor formatting deviations in stored messages.
     """
 
-    pattern = r"^Report against\s+(.+?)\s+\(ID:\s*(\d+)\):\s*(.+)"
-    match = re.match(pattern, content or "")
+    if not content:
+        return None
+
+    pattern = r"Report against\s+(.+?)\s*\(ID:\s*(\d+)\)\s*:\s*(.+)"
+    match = re.search(pattern, content, flags=re.IGNORECASE)
     if not match:
         return None
 
@@ -1025,8 +1052,19 @@ def send_message(to_user_id):
         ((Message.sender_id == to_user_id) & (Message.receiver_id == my_id))
     ).order_by(Message.timestamp.asc()).all()
 
-    return render_template("messages.html", messages=chat_messages, other=receiver)
+    messages_with_meta = [
+        {
+            "msg": m,
+            "report": parse_report_message(m.content),
+        }
+        for m in chat_messages
+    ]
 
+    return render_template(
+        "messages.html",
+        messages=messages_with_meta,
+        other=receiver,
+    )
 # -------------------- CHAT SYSTEM --------------------
 
 @app.route("/chat/<int:user_id>", methods=["GET", "POST"])
@@ -1721,7 +1759,7 @@ def edit_offer(offer_id):
         # 1) metin alanlarını güncelle
         offer.title = request.form["title"]
         offer.hours = request.form["hours"]
-        offer.location = request.form["location"].capitalize()
+        offer.location = request.form["location"].strip()
         offer.description = request.form["description"]
 
         # 2) image güncelleme logic’i
@@ -1798,7 +1836,7 @@ def edit_need(need_id):
         # 1) metin alanlarını güncelle
         need.title = request.form["title"]
         need.hours = request.form["hours"]
-        need.location = request.form["location"].capitalize()
+        need.location = request.form["location"].strip()
         need.description = request.form["description"]
 
         # 2) image güncelleme logic’i

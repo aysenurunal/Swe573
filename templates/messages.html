@@ -6,8 +6,23 @@
   💬 Chat with {{ other.email }}
 </h2>
 
+<style>
+  .report-link {
+    color: #2563eb;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .report-link:hover,
+  .report-link:focus {
+    text-decoration: underline;
+  }
+</style>
+
 <div id="chat-box" style="height:60vh; overflow-y:auto; padding:12px; background:#e5e7eb; border-radius:12px;">
-  {% for m in messages %}
+  {% for item in messages %}
+    {% set m = item.msg %}
+    {% set report = item.report %}
     {% if m.sender_id == session['user_id'] %}
       <!-- MY MESSAGE (right side) -->
       <div style="display:flex; justify-content:flex-end; margin:6px 0;">
@@ -19,7 +34,13 @@
           max-width:60%;
           font-size:1rem;
         ">
-          {{ m.content }}
+          {% if report %}
+            Report against
+            <a class="report-link" href="{{ url_for('view_profile', user_id=report.user_id) }}">{{ report.email }}</a>
+            (ID: {{ report.user_id }}): {{ report.reason }}
+          {% else %}
+            {{ m.content }}
+          {% endif %}
         </div>
       </div>
     {% else %}
@@ -34,7 +55,13 @@
           font-size:1rem;
           border:1px solid #d1d5db;
         ">
-          {{ m.content }}
+          {% if report %}
+            Report against
+            <a class="report-link" href="{{ url_for('view_profile', user_id=report.user_id) }}">{{ report.email }}</a>
+            (ID: {{ report.user_id }}): {{ report.reason }}
+          {% else %}
+            {{ m.content }}
+          {% endif %}
         </div>
       </div>
     {% endif %}
