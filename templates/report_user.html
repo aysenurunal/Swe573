@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Report {{ reported.email }}{% endblock %}
+{% block content %}
+<div style="background:#fff; border-radius:12px; padding:24px; box-shadow:0 4px 12px rgba(0,0,0,0.08); border:1px solid #e5e7eb;">
+  <h1 style="margin-top:0; margin-bottom:8px; font-size:1.4rem; font-weight:700; color:#111827;">Report {{ reported.email }}</h1>
+  <p style="margin-top:0; margin-bottom:16px; color:#4b5563;">Please describe why you are reporting this user. Your message will be sent to the admin.</p>
+
+  <form action="{{ url_for('report_user', user_id=reported.user_id) }}" method="POST" style="display:flex; flex-direction:column; gap:12px;">
+    <textarea name="reason" rows="5" placeholder="Please share the details here..." style="width:100%; padding:14px; border-radius:10px; border:1px solid #d1d5db; font-size:1rem; resize:vertical; box-sizing:border-box;"></textarea>
+    <div>
+      <button type="submit" style="background:#f97316; color:white; border:none; padding:10px 18px; border-radius:10px; font-weight:700; cursor:pointer; box-shadow:0 3px 8px rgba(0,0,0,0.12); transition:transform 0.15s ease, background-color 0.15s ease;">Send to Admin</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
