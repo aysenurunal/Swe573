@@ -6,6 +6,17 @@
   <section class="forum-hero">
     <h1>Community Forum</h1>
     <p>Share your ideas, ask for help, and connect with your neighbors.</p>
+    <form class="search-form" method="get" action="{{ url_for('forum_index') }}">
+      <label class="visually-hidden" for="forum-search">Search forum</label>
+      <input
+        id="forum-search"
+        name="q"
+        type="search"
+        placeholder="Search discussions"
+        value="{{ q or '' }}"
+      >
+      <button type="submit" class="btn-secondary">Search</button>
+    </form>
   </section>
 
   <section class="new-post-card">

@@ -14,6 +14,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
+from sqlalchemy import or_
 from config import ADMIN_EMAIL, ADMIN_PASSWORD, SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
 from datetime import datetime, timedelta
@@ -244,6 +245,10 @@ class ForumPost(db.Model):
     title = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.Index("ix_forum_post_title", "title"),
+        db.Index("ix_forum_post_content", "content"),
+    )
 
     comments = db.relationship(
         "ForumComment",
@@ -429,6 +434,38 @@ def _fetch_related_labels_via_sparql(entity_id, max_items=20):
     except requests.RequestException:
         return set()
 
+def _fetch_instance_labels_via_sparql(entity_id, max_items=50):
+    """Fetch labels for items that are instances of the given entity."""
+    if not entity_id:
+        return set()
+
+    query = f"""
+        SELECT DISTINCT ?label WHERE {{
+          ?item wdt:P31/wdt:P279* wd:{entity_id} .
+          ?item rdfs:label ?label .
+          FILTER(LANG(?label) IN ("en", "tr"))
+        }}
+        LIMIT {max_items}
+        """
+
+    try:
+        response = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers=SPARQL_HEADERS,
+            timeout=8,
+        )
+        response.raise_for_status()
+        data = response.json()
+        results = data.get("results", {}).get("bindings", [])
+        labels = set()
+        for item in results:
+            label_val = item.get("label", {}).get("value")
+            if label_val:
+                labels.add(label_val.strip().lower())
+        return labels
+    except requests.RequestException:
+        return set()
 
 def _expand_query_tokens(query):
     base_tokens = re.findall(r"[\w']+", query.lower())
@@ -555,7 +592,6 @@ def build_listing_filter(model, terms):
                 model.location.ilike(like_pattern),
             ]
         )
-    from sqlalchemy import or_
 
     return or_(*filters)
 
@@ -567,6 +603,7 @@ def index():
 
     if query:
         terms = fetch_wikidata_semantic_terms(query)
+        print("TERMS:", sorted(list(terms))[:50])
         # Cap for performance: keep query + up to 30 other terms
         terms = list(terms)
         terms = [t for t in terms if t != query.lower()]
@@ -715,9 +752,20 @@ def favorites_page():
 
 @app.route("/forum")
 def forum_index():
-    posts = ForumPost.query.order_by(ForumPost.created_at.desc()).all()
-    return render_template("forum.html", posts=posts)
+    q = request.args.get("q", "").strip()
+    query = ForumPost.query
 
+    if q:
+        like_pattern = f"%{q}%"
+        query = query.filter(
+            or_(
+                ForumPost.title.ilike(like_pattern),
+                ForumPost.content.ilike(like_pattern),
+            )
+        )
+
+    posts = query.order_by(ForumPost.created_at.desc()).all()
+    return render_template("forum.html", posts=posts, q=q)
 
 @app.route("/forum", methods=["POST"])
 @login_required
