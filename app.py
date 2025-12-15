@@ -31,7 +31,7 @@ import time
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 from requests.exceptions import SSLError
-#geolocator = Nominatim(user_agent="the-hive", timeout=3)
+geolocator = Nominatim(user_agent="the-hive", timeout=10)
 app = Flask(__name__)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
@@ -123,18 +123,37 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def geocode_with_retry(address, attempts=3, timeout=10):
-    """Best-effort geocoding helper used for creation and on-demand lookups."""
-    geolocator = Nominatim(user_agent="the-hive", timeout=timeout)
 
-    for _ in range(attempts):
-        try:
-            return geolocator.geocode(address)
-        except (GeocoderTimedOut, GeocoderUnavailable, SSLError):
-            time.sleep(1)
-        except Exception:
-            return None
+def geocode_with_retry(address, attempts=3):
+    """Best-effort geocoding helper used for creation and on-demand lookups."""
+    if not address:
+        return None
+
+    address = address.strip()
+
+    # Online / non-geographic cases
+    if address.lower() in {"online", "remote", "anywhere"}:
+        return None
+
+    # Try increasingly specific queries
+    candidates = [address]
+    if "turkey" not in address.lower():
+        candidates.append(f"{address}, Istanbul, Turkey")
+        candidates.append(f"{address}, Turkey")
+
+    for query in candidates:
+        for i in range(attempts):
+            try:
+                loc = geolocator.geocode(query)
+                if loc:              # ← kritik satır
+                    return loc
+            except (GeocoderTimedOut, GeocoderUnavailable, SSLError):
+                time.sleep(1.5 * (i + 1))
+            except Exception:
+                return None
+
     return None
+
 
 # ---------- DATABASE MODEL ----------
 
@@ -297,6 +316,7 @@ SPARQL_HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept": "application/sparql-results+json",
 }
+
 
 def _collect_entity_labels(entity):
     labels = set()
@@ -467,6 +487,40 @@ def _fetch_instance_labels_via_sparql(entity_id, max_items=50):
     except requests.RequestException:
         return set()
 
+def _fetch_subclass_labels_via_sparql(entity_id, max_items=50):
+    """Fetch labels for subclasses (and sub-subclasses) of the given entity."""
+    if not entity_id:
+        return set()
+
+    query = f"""
+    SELECT DISTINCT ?label WHERE {{
+      ?item wdt:P279* wd:{entity_id} .
+      ?item rdfs:label ?label .
+      FILTER(LANG(?label) IN ("en","tr"))
+    }}
+    LIMIT {max_items}
+    """
+
+    try:
+        response = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": query, "format": "json"},
+            headers=SPARQL_HEADERS,
+            timeout=12,
+        )
+        response.raise_for_status()
+        data = response.json()
+        results = data.get("results", {}).get("bindings", [])
+        labels = set()
+        for item in results:
+            v = item.get("label", {}).get("value")
+            if v:
+                labels.add(v.strip().lower())
+        return labels
+    except requests.RequestException:
+        return set()
+
+
 def _expand_query_tokens(query):
     base_tokens = re.findall(r"[\w']+", query.lower())
     expansions = set(base_tokens)
@@ -532,13 +586,22 @@ def fetch_wikidata_semantic_terms(query):
             headers=HEADERS,
             timeout=6,
         )
+        print("WBSEARCH status:", search_response.status_code)
+        print("WBSEARCH url:", search_response.url)
         search_response.raise_for_status()
         search_results = search_response.json().get("search", [])
+        print("WBSEARCH results:", len(search_results))
+        if search_results:
+            print("WBSEARCH top hit:", search_results[0].get("id"), search_results[0].get("label"),
+                  search_results[0].get("description"))
+
         if not search_results:
             return terms or {query.lower()}
 
         top_hit = _choose_best_search_hit(search_results, query)
         entity_id = top_hit.get("id")
+        ...
+        # tek entity üzerinden devam
         if not entity_id:
             return terms or {query.lower()}
 
@@ -556,17 +619,23 @@ def fetch_wikidata_semantic_terms(query):
         )
         entity_response.raise_for_status()
         entity = entity_response.json().get("entities", {}).get(entity_id, {})
+        print("WBGET status:", entity_response.status_code)
+        print("WBGET url:", entity_response.url)
+
         terms.update(_collect_entity_labels(entity))
 
         claims = entity.get("claims", {})
-        related_ids = _collect_related_entity_ids(
-            claims,
-            ["P279", "P31", "P361", "P527", "P366", "P3095", "P1056"],
-        )
+        related_ids = _collect_related_entity_ids(claims, ["P279", "P31"])
+
         terms.update(_fetch_entity_labels(related_ids))
         terms.update(_fetch_related_labels_via_sparql(entity_id))
+
+        # NEW: pull instances/subclasses under the concept (helps: sport -> baseball)
+        terms.update(_fetch_subclass_labels_via_sparql(entity_id, max_items=50))
+
         terms.add(query.lower())
         return {t for t in terms if len(t) >= 3}
+
     except requests.RequestException:
         fallback_terms = terms or {query.lower()}
         return fallback_terms
@@ -957,7 +1026,8 @@ def add_offer():
             is_online=("online" in location.lower()),
             image_filename=image_filename,
             latitude=lat,
-            longitude=lon
+            longitude=lon,
+            is_active=True,
         )
 
         db.session.add(offer)
@@ -1182,68 +1252,24 @@ def uploaded_file(filename):
 @app.route("/offer/<int:offer_id>")
 def offer_detail(offer_id):
     offer = Offer.query.get_or_404(offer_id)
-    if offer.location and (offer.latitude is None or offer.longitude is None):
-        candidates = [
-            offer.location,  # kullanıcı ne girdiyse
-            f"{offer.location}, city",  # belirsizse biraz genelle
-            f"{offer.location}, country",  # daha da genelle
-        ]
-
-        loc = None
-        for q in candidates:
-            loc = geocode_with_retry(q)
-            if loc:
-                break
-
-        if loc:
-            offer.latitude = loc.latitude
-            offer.longitude = loc.longitude
-            db.session.commit()
 
     user_favorites = set()
     if "user_id" in session:
         favs = Favorite.query.filter_by(user_id=session["user_id"]).all()
         user_favorites = {f.offer_id for f in favs}
 
-    return render_template(
-        "offer_detail.html",
-        offer=offer,
-        user_favorites=user_favorites
-    )
+    return render_template("offer_detail.html", offer=offer, user_favorites=user_favorites)
 
 @app.route("/need/<int:need_id>")
 def need_detail(need_id):
     need = Need.query.get_or_404(need_id)
-
-    if need.location and (need.latitude is None or need.longitude is None):
-        candidates = [
-            need.location,
-            f"{need.location}, city",
-            f"{need.location}, country",
-        ]
-
-        loc = None
-        for q in candidates:
-            loc = geocode_with_retry(q)
-            if loc:
-                break
-
-        if loc:
-            need.latitude = loc.latitude
-            need.longitude = loc.longitude
-            db.session.commit()
-
 
     user_need_favorites = set()
     if "user_id" in session:
         favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()
         user_need_favorites = {f.need_id for f in favs}
 
-    return render_template(
-        "need_detail.html",
-        need=need,
-        user_need_favorites=user_need_favorites
-    )
+    return render_template("need_detail.html", need=need, user_need_favorites=user_need_favorites)
 
 @app.route("/logout")
 def logout():
