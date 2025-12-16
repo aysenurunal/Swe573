@@ -681,8 +681,8 @@ def index():
         offer_filter = build_listing_filter(Offer, terms)
         need_filter = build_listing_filter(Need, terms)
 
-        offers_query = Offer.query.filter_by(is_active=True)
-        needs_query = Need.query.filter_by(is_active=True)
+        offers_query = Offer.query.filter_by(is_active=True).join(User)
+        needs_query = Need.query.filter_by(is_active=True).join(User)
 
         if offer_filter is not None:
             offers_query = offers_query.filter(offer_filter)
@@ -692,8 +692,8 @@ def index():
         offers = offers_query.all()
         needs = needs_query.all()
     else:
-        offers = Offer.query.filter_by(is_active=True).all()
-        needs = Need.query.filter_by(is_active=True).all()
+        offers = Offer.query.filter_by(is_active=True).join(User).all()
+        needs = Need.query.filter_by(is_active=True).join(User).all()
 
     user_favorites = set()
     user_need_favorites = set()
@@ -1374,6 +1374,10 @@ def chat(user_id):
 
     me = session["user_id"]
     other = user_id
+    other_user = User.query.get(other)
+
+    if not other_user:
+        return "User not found.", 404
     if is_blocked_between(me, other):
         return "Messaging is disabled between blocked users.", 403
 
@@ -1474,7 +1478,6 @@ def chat(user_id):
         })
     timeline.sort(key=lambda x: x["timestamp"])
 
-    other_user = User.query.get(other)
 
     last_message_ts = messages[-1].timestamp.isoformat() if messages else ""
 
