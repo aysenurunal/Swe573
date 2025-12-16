@@ -58,7 +58,21 @@ def enforce_ban():
     if user and user.is_banned and request.endpoint not in {"logout", "login"}:
         session.clear()
         return render_template("login.html", error="Your account has been banned."), 403
+@app.before_request
+def ensure_session_user_exists():
+    """Log out visitors that still hold a session for a deleted account."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return
 
+    user = User.query.get(user_id)
+    if user:
+        return
+
+    session.clear()
+    if request.endpoint not in {"login", "register"}:
+        flash("Your session has expired. Please sign in again.")
+        return redirect(url_for("login"))
 from functools import wraps
 
 def login_required(f):

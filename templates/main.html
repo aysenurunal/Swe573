@@ -36,10 +36,14 @@
 
     <div class="small muted">
       Posted by
-      <a href="{{ url_for('view_profile', user_id=offer.user_id) }}"
-         style="color:#ffd84d; text-decoration:none;">
-        {{ offer.user.email.split('@')[0] }}
-      </a>
+      {% if offer.user %}
+        <a href="{{ url_for('view_profile', user_id=offer.user_id) }}"
+           style="color:#ffd84d; text-decoration:none;">
+          {{ offer.user.email.split('@')[0] }}
+        </a>
+      {% else %}
+        <span class="small muted">Deleted user</span>
+      {% endif %}
     </div>
   </div>
 
