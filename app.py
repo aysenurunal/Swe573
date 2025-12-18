@@ -1475,7 +1475,7 @@ def chat(user_id):
         }
 
     for m in messages:
-            timeline.append(build_message_entry(m))
+        timeline.append(build_message_entry(m))
     for d in deals:
         timeline.append({
             "type": "deal",
@@ -1484,9 +1484,7 @@ def chat(user_id):
         })
     timeline.sort(key=lambda x: x["timestamp"])
 
-
-    last_message_ts = messages[-1].timestamp.isoformat() if messages else ""
-
+    last_event_ts = timeline[-1]["timestamp"].isoformat() if timeline else ""
     listing_data = {
         "type": listing_type,
         "title": listing.title,
@@ -1503,7 +1501,7 @@ def chat(user_id):
         listing_data=listing_data,
         timeline=timeline,
         listing_closed=listing_closed,
-        last_message_ts=last_message_ts
+        last_event_ts=last_event_ts,
     )
 
 @app.route("/chat/<int:user_id>/messages", methods=["GET", "POST"])
@@ -1544,6 +1542,22 @@ def chat_messages(user_id):
             "report": parse_report_message(msg.content),
         }
 
+    def serialize_deal(deal):
+        return {
+            "id": deal.id,
+            "listing_type": deal.listing_type,
+            "listing_id": deal.listing_id,
+            "starter_id": deal.starter_id,
+            "receiver_id": deal.receiver_id,
+            "hours": deal.hours,
+            "date": deal.date.isoformat(),
+            "status": deal.status,
+            "starter_confirm": deal.starter_confirm,
+            "receiver_confirm": deal.receiver_confirm,
+            "cancel_starter_confirm": deal.cancel_starter_confirm,
+            "cancel_receiver_confirm": deal.cancel_receiver_confirm,
+        }
+
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
         text = payload.get("message") if isinstance(payload, dict) else None
@@ -1568,6 +1582,7 @@ def chat_messages(user_id):
         return jsonify({"message": serialize_message(msg)}), 201
 
     after = request.args.get("after")
+    include_deals = request.args.get("include_deals") in ("1", "true", "True")
 
     messages_query = Message.query.filter(
         (
@@ -1586,7 +1601,31 @@ def chat_messages(user_id):
 
     messages = messages_query.order_by(Message.timestamp.asc()).all()
 
-    return jsonify({"messages": [serialize_message(m) for m in messages]})
+    response_payload = {"messages": [serialize_message(m) for m in messages]}
+
+    if include_deals:
+        deals_query = Transaction.query.filter(
+            (
+                    (Transaction.starter_id == me) & (Transaction.receiver_id == other)
+            )
+            | ((Transaction.starter_id == other) & (Transaction.receiver_id == me))
+        ).filter(
+            Transaction.listing_id == listing_id,
+            Transaction.listing_type == listing_type,
+        )
+
+        if after:
+            try:
+                after_dt = datetime.fromisoformat(after)
+                deals_query = deals_query.filter(Transaction.date > after_dt)
+            except ValueError:
+                pass
+
+        deals = deals_query.order_by(Transaction.date.asc()).all()
+        response_payload["deals"] = [serialize_deal(d) for d in deals]
+
+    return jsonify(response_payload)
+
 
 @app.route("/messages")
 @login_required

@@ -43,7 +43,7 @@
 
 <!-- ---------------- TIMELINE (Messages + Deals) ---------------- -->
 <div class="timeline"
-     data-last-timestamp="{{ last_message_ts }}"
+     data-last-timestamp="{{ last_event_ts }}"
      data-other-id="{{ other_user.user_id }}"
      data-listing-id="{{ session['active_listing_id'] }}"
      data-listing-type="{{ session['active_listing_type'] }}"
@@ -501,6 +501,18 @@ document.addEventListener('DOMContentLoaded', () => {
     timelineEl.scrollTop = timelineEl.scrollHeight;
   }
 
+  function updateLastTimestamp(ts) {
+    if (!ts) return;
+    if (!lastTimestamp) {
+      lastTimestamp = ts;
+      return;
+    }
+
+    if (new Date(ts) > new Date(lastTimestamp)) {
+      lastTimestamp = ts;
+    }
+  }
+
   function addMessageBubble(msg) {
     const isMe = String(msg.sender_id) === String(currentUserId);
 
@@ -534,7 +546,161 @@ document.addEventListener('DOMContentLoaded', () => {
     wrapper.appendChild(text);
     timelineEl.appendChild(wrapper);
   }
+  function buildDealStatusClass(status) {
+    switch (status) {
+      case 'pending':
+        return 'deal-pending';
+      case 'accepted':
+        return 'deal-accepted';
+      case 'cancel_pending':
+        return 'deal-cancel-pending';
+      case 'cancelled':
+        return 'deal-cancelled';
+      case 'completed':
+        return 'deal-completed';
+      default:
+        return '';
+    }
+  }
 
+  function buildDealActions(deal) {
+    const actions = document.createElement('div');
+    actions.className = 'deal-actions';
+
+    const isStarter = String(deal.starter_id) === String(currentUserId);
+    const isReceiver = String(deal.receiver_id) === String(currentUserId);
+
+    if (deal.status === 'pending') {
+      if (isReceiver) {
+        const form = document.createElement('form');
+        form.action = `/deal/accept/${deal.id}`;
+        form.method = 'post';
+        form.style.display = 'inline';
+
+        const button = document.createElement('button');
+        button.className = 'btn-small primary';
+        button.textContent = 'Accept Deal';
+        form.appendChild(button);
+        actions.appendChild(form);
+      } else {
+        const note = document.createElement('span');
+        note.className = 'deal-note';
+        note.textContent = 'Waiting for other user…';
+        actions.appendChild(note);
+      }
+    } else if (deal.status === 'accepted') {
+      const iConfirmed = (isStarter && deal.starter_confirm) || (isReceiver && deal.receiver_confirm);
+
+      if (!iConfirmed) {
+        const form = document.createElement('form');
+        form.action = `/deal/complete/${deal.id}`;
+        form.method = 'post';
+        form.className = 'comment-complete-form';
+
+        const label = document.createElement('label');
+        label.htmlFor = `comment-${deal.id}`;
+        label.className = 'comment-label';
+        label.textContent = `Add a comment (max 250 chars) before completing:`;
+
+        const textarea = document.createElement('textarea');
+        textarea.name = 'comment';
+        textarea.id = `comment-${deal.id}`;
+        textarea.maxLength = 250;
+        textarea.required = true;
+        textarea.placeholder = `Share feedback for ${otherUserEmail}`;
+
+        const button = document.createElement('button');
+        button.className = 'btn-small success';
+        button.textContent = 'Confirm Completion';
+
+        form.append(label, textarea, button);
+        actions.appendChild(form);
+      } else {
+        const note = document.createElement('span');
+        note.className = 'deal-note';
+        note.textContent = 'Waiting for other user to confirm…';
+        actions.appendChild(note);
+      }
+
+      if (!(deal.starter_confirm && deal.receiver_confirm)) {
+        const cancelForm = document.createElement('form');
+        cancelForm.action = `/deal/cancel_request/${deal.id}`;
+        cancelForm.method = 'post';
+        cancelForm.style.display = 'inline';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn-small danger';
+        cancelBtn.textContent = 'Request Cancel';
+
+        cancelForm.appendChild(cancelBtn);
+        actions.appendChild(cancelForm);
+      }
+    } else if (deal.status === 'cancel_pending') {
+      const needsConfirm = (isStarter && !deal.cancel_starter_confirm) || (isReceiver && !deal.cancel_receiver_confirm);
+      if (needsConfirm) {
+        const form = document.createElement('form');
+        form.action = `/deal/cancel_confirm/${deal.id}`;
+        form.method = 'post';
+        form.style.display = 'inline';
+
+        const button = document.createElement('button');
+        button.className = 'btn-small danger';
+        button.textContent = 'Confirm Cancel';
+
+        form.appendChild(button);
+        actions.appendChild(form);
+      } else {
+        const note = document.createElement('span');
+        note.className = 'deal-note';
+        note.textContent = 'Waiting for other user…';
+        actions.appendChild(note);
+      }
+    } else if (deal.status === 'cancelled') {
+      const note = document.createElement('span');
+      note.className = 'deal-note';
+      note.textContent = '❌ Deal cancelled.';
+      actions.appendChild(note);
+    } else if (deal.status === 'completed') {
+      const note = document.createElement('span');
+      note.className = 'deal-note';
+      note.textContent = `🎉 Completed — ${deal.hours} hours transferred.`;
+      actions.appendChild(note);
+    }
+
+    return actions;
+  }
+
+  function addDealBubble(deal) {
+    const isMe = String(deal.starter_id) === String(currentUserId);
+    const wrapper = document.createElement('div');
+    wrapper.className = `deal-bubble ${buildDealStatusClass(deal.status)} ${isMe ? 'me' : 'them'}`;
+    wrapper.dataset.dealId = deal.id;
+
+    const header = document.createElement('div');
+    header.className = 'deal-header';
+    const title = document.createElement('span');
+    title.textContent = '🤝 Deal';
+    const status = document.createElement('span');
+    status.className = 'deal-status-tag';
+    status.textContent = (deal.status || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    header.append(title, status);
+
+    const body = document.createElement('div');
+    body.className = 'deal-body';
+    const hours = document.createElement('div');
+    hours.innerHTML = `<strong>Hours:</strong> ${deal.hours}`;
+
+    const dateRow = document.createElement('div');
+    const date = deal.date ? formatTimestamp(deal.date) : 'Not set';
+    dateRow.innerHTML = `<strong>Date:</strong> ${date}`;
+
+    body.append(hours, dateRow);
+
+    const actions = buildDealActions(deal);
+
+    wrapper.append(header, body, actions);
+    timelineEl.appendChild(wrapper);
+  }
   function showToast(text) {
     if (!toastContainer) return;
 
@@ -587,7 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await res.json();
         if (data.message) {
           addMessageBubble(data.message);
-          lastTimestamp = data.message.timestamp;
+          updateLastTimestamp(data.message.timestamp);
           scrollTimelineToBottom();
         }
       } else {
@@ -616,22 +782,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (lastTimestamp) {
       params.append('after', lastTimestamp);
     }
+    params.append('include_deals', '1');
 
     const res = await fetch(`/chat/${otherUserId}/messages?${params.toString()}`);
     if (!res.ok) return;
 
     const data = await res.json();
-    if (!data.messages || !Array.isArray(data.messages)) return;
+    const incomingMessages = Array.isArray(data.messages) ? data.messages : [];
+    const incomingDeals = Array.isArray(data.deals) ? data.deals : [];
 
-    data.messages.forEach(msg => {
+    incomingMessages.forEach(msg => {
       addMessageBubble(msg);
       if (String(msg.sender_id) !== String(currentUserId)) {
         notifyNewMessage(msg);
       }
-      lastTimestamp = msg.timestamp;
+      updateLastTimestamp(msg.timestamp);
     });
 
-    if (data.messages.length) {
+    incomingDeals.forEach(deal => {
+      addDealBubble(deal);
+      updateLastTimestamp(deal.date);
+    });
+
+    if (incomingMessages.length || incomingDeals.length) {
       scrollTimelineToBottom();
     }
   }
