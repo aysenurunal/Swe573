@@ -1047,7 +1047,10 @@ def my_profile():
     if "user_id" not in session:
         return redirect("/login")
 
-    user = User.query.get_or_404(session["user_id"])
+    user = User.query.get(session["user_id"])
+    if not user:
+        session.pop("user_id", None)
+        return redirect(url_for("login"))
 
     # --- OFFER'lar ---
     user_offers = Offer.query.filter_by(user_id=user.user_id).all()
@@ -2204,7 +2207,9 @@ def __debug():
         "has_profile": "/profile" in rules,
         "rules_sample": rules[:30],
         "rules_count": len(rules),
+        "session_user_id": session.get("user_id"),
     }
+
 
 #debug sonu
 if __name__ == "__main__":
