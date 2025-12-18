@@ -716,8 +716,8 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
+        email = request.form["email"].strip().lower()
+        password = request.form["password"].strip()
 
         user = User.query.filter_by(email=email).first()
 
@@ -735,9 +735,9 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
-        confirm_password = request.form["confirm_password"]
+        email = request.form["email"].strip().lower()
+        password = request.form["password"].strip()
+        confirm_password = request.form["confirm_password"].strip()
 
         if password != confirm_password:
             return "Passwords do not match!"
