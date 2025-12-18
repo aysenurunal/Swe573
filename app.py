@@ -20,7 +20,7 @@ import ssl
 from datetime import datetime, timedelta
 import re
 import requests
-
+from sqlalchemy.exc import IntegrityError
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
@@ -735,9 +735,12 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        email = request.form["email"].strip().lower()
-        password = request.form["password"].strip()
-        confirm_password = request.form["confirm_password"].strip()
+        email = request.form.get("email")  # strip yok
+        password = request.form.get("password")
+        confirm_password = request.form.get("confirm_password")
+
+        if not email or not password or not confirm_password:
+            return "All fields are required."
 
         if password != confirm_password:
             return "Passwords do not match!"
@@ -749,14 +752,14 @@ def register():
         password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
         if email == ADMIN_EMAIL:
             return "Cannot register with admin email."
-        user = User(email=email, password_hash=password_hash)
+        user = User(email=email, password_hash=password_hash, timebank_balance=3)
 
-        user.timebank_balance = 3
-
-        db.session.add(user)
-        db.session.commit()
-
-        return redirect(url_for("login"))
+        try:
+            db.session.add(user)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return "Email is already registered."
 
     return render_template("register.html")
 
