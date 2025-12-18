@@ -82,6 +82,24 @@
     .search-btn:hover {
       background:#ffe58a;
     }
+        /* ---------------------- HOME GRID ---------------------- */
+    .offers-needs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+
+    .offers-column,
+    .needs-column {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .section-title {
+      margin-top: 10px;
+      margin-bottom: 6px;
+    }
 
     /* ---------------------------------------------------------
                     MODERN CARD DESIGN (NEW)

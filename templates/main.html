@@ -9,106 +9,85 @@
   <button class="search-btn" type="submit">Search</button>
 </form>
 
-<!-- OFFERS -->
-<h3 style="margin-top:10px; margin-bottom:6px;">Offers</h3>
+<div class="offers-needs-grid">
+  <!-- OFFERS -->
+  <section class="offers-column">
+    <h3 class="section-title">Offers</h3>
 
-{% for offer in offers %}
-  <div class="offer-card">
-      <span class="type-badge offer">Offer</span>
+    {% for offer in offers %}
+      <div class="offer-card">
+        <span class="type-badge offer">Offer</span>
 
-    <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}" class="offer-title">
-  {{ offer.title }}
-    </a>
-
-
-    <div class="card-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
-
-    <!-- OFFER FAVORITE -->
-    <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
-      <button style="background:none; border:none; cursor:pointer; font-size:20px; color:red;">
-        {% if offer.offer_id in user_favorites %}
-          ♥
-        {% else %}
-          ♡
-        {% endif %}
-      </button>
-    </form>
-
-    <div class="small muted">
-      Posted by
-      {% if offer.user %}
-        <a href="{{ url_for('view_profile', user_id=offer.user_id) }}"
-           style="color:#ffd84d; text-decoration:none;">
-          {{ offer.user.email.split('@')[0] }}
+        <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}" class="offer-title">
+          {{ offer.title }}
         </a>
-      {% else %}
-        <span class="small muted">Deleted user</span>
-      {% endif %}
-    </div>
-  </div>
 
-{% else %}
-  <p class="small muted" style="margin-top:6px;">No offers posted yet.</p>
-{% endfor %}
+        <div class="card-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
 
+        <!-- OFFER FAVORITE -->
+        <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
+          <button style="background:none; border:none; cursor:pointer; font-size:20px; color:red;">
+            {% if offer.offer_id in user_favorites %}♥{% else %}♡{% endif %}
+          </button>
+        </form>
 
-<h3 style="margin-top:20px; margin-bottom:6px;">Needs</h3>
+        <div class="small muted">
+          Posted by
+          {% if offer.user %}
+            <a href="{{ url_for('view_profile', user_id=offer.user_id) }}"
+               style="color:#ffd84d; text-decoration:none;">
+              {{ offer.user.email.split('@')[0] }}
+            </a>
+          {% else %}
+            <span class="small muted">Deleted user</span>
+          {% endif %}
+        </div>
+      </div>
 
-{% for need in needs %}
-<div class="need-card">
-
-  <!-- Mavi Need etiketi -->
-  <span class="type-badge need">Need</span>
-
-  <!-- Başlık -->
-  <a href="{{ url_for('need_detail', need_id=need.need_id) }}"
-     class="need-title"
-     style="text-decoration:none;">
-      {{ need.title }}
-  </a>
-
-  <!-- Hours & Location -->
-  <div class="card-meta">{{ need.hours }} hours — {{ need.location }}</div>
-
-  <!-- Favorite Button -->
-  <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">
-    <button style="background:none;border:none;cursor:pointer;font-size:20px;color:red;">
-      {% if need.need_id in user_need_favorites %}
-        ♥
-      {% else %}
-        ♡
-      {% endif %}
-    </button>
-  </form>
-
-  <!-- User -->
-  <div class="small muted">
-    Need posted by
-    {% if need.user %}
-      <a href="{{ url_for('view_profile', user_id=need.user_id) }}"
-         style="color:#67e8f9; text-decoration:none;">
-         {{ need.user.email.split('@')[0] }}
-      </a>
     {% else %}
-      <span class="small muted">Deleted user</span>
-    {% endif %}
-  </div>
+      <p class="small muted" style="margin-top:6px;">No offers posted yet.</p>
+    {% endfor %}
+  </section>
 
+  <!-- NEEDS -->
+  <section class="needs-column">
+    <h3 class="section-title">Needs</h3>
+
+    {% for need in needs %}
+      <div class="need-card">
+        <span class="type-badge need">Need</span>
+
+        <a href="{{ url_for('need_detail', need_id=need.need_id) }}"
+           class="need-title"
+           style="text-decoration:none;">
+          {{ need.title }}
+        </a>
+
+        <div class="card-meta">{{ need.hours }} hours — {{ need.location }}</div>
+
+        <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">
+          <button style="background:none;border:none;cursor:pointer;font-size:20px;color:red;">
+            {% if need.need_id in user_need_favorites %}♥{% else %}♡{% endif %}
+          </button>
+        </form>
+
+        <div class="small muted">
+          Need posted by
+          {% if need.user %}
+            <a href="{{ url_for('view_profile', user_id=need.user_id) }}"
+               style="color:#67e8f9; text-decoration:none;">
+              {{ need.user.email.split('@')[0] }}
+            </a>
+          {% else %}
+            <span class="small muted">Deleted user</span>
+          {% endif %}
+        </div>
+      </div>
+
+    {% else %}
+      <p class="small muted" style="margin-top:6px;">No need posts yet.</p>
+    {% endfor %}
+  </section>
 </div>
-{% else %}
-<p class="small muted" style="margin-top:6px;">No need posts yet.</p>
-{% endfor %}
 
 {% endblock %}
-
-
-
-
-
-
-
-
-
-
-
-
