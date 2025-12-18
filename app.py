@@ -1296,6 +1296,45 @@ def get_chat_listing_context():
         session["active_listing_type"] = listing_type
 
     return session.get("active_listing_id"), session.get("active_listing_type")
+def build_conversation_key(other_id, listing_id=None, listing_type=None):
+    """Create a stable session key for tracking chat read state."""
+
+    normalized_type = listing_type or "general"
+    normalized_id = listing_id if listing_id is not None else "general"
+    return f"{other_id}:{normalized_id}:{normalized_type}"
+
+
+def remember_conversation_seen(other_id, listing_id=None, listing_type=None, timestamp=None):
+    """Store the last seen timestamp for a conversation in the signed session."""
+
+    if not timestamp:
+        return
+
+    seen_map = session.get("chat_last_seen", {})
+    key = build_conversation_key(other_id, listing_id, listing_type)
+    seen_map[key] = timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
+    session["chat_last_seen"] = seen_map
+
+
+def conversation_has_unread(other_id, listing_id=None, listing_type=None, latest_timestamp=None):
+    """Return True when the latest event happened after the user's last visit."""
+
+    if not latest_timestamp:
+        return False
+
+    seen_map = session.get("chat_last_seen", {})
+    key = build_conversation_key(other_id, listing_id, listing_type)
+    seen_ts = seen_map.get(key)
+
+    if not seen_ts:
+        return True
+
+    try:
+        seen_dt = datetime.fromisoformat(seen_ts)
+    except ValueError:
+        return True
+
+    return latest_timestamp > seen_dt
 
 def parse_report_message(content: str):
     """Extract report metadata from a standard report message string.
@@ -1356,6 +1395,14 @@ def send_message(to_user_id):
         ((Message.sender_id == my_id) & (Message.receiver_id == to_user_id)) |
         ((Message.sender_id == to_user_id) & (Message.receiver_id == my_id))
     ).order_by(Message.timestamp.asc()).all()
+
+    if chat_messages:
+        remember_conversation_seen(
+            to_user_id,
+            listing_id=None,
+            listing_type="general",
+            timestamp=chat_messages[-1].timestamp,
+        )
 
     messages_with_meta = [
         {
@@ -1485,6 +1532,13 @@ def chat(user_id):
     timeline.sort(key=lambda x: x["timestamp"])
 
     last_event_ts = timeline[-1]["timestamp"].isoformat() if timeline else ""
+    if timeline:
+        remember_conversation_seen(
+            other,
+            listing_id=listing_id,
+            listing_type=listing_type,
+            timestamp=timeline[-1]["timestamp"],
+        )
     listing_data = {
         "type": listing_type,
         "title": listing.title,
@@ -1684,7 +1738,12 @@ def messages_list():
             .first()
         )
 
-        has_notification = latest_msg and latest_msg.sender_id != my_id
+        has_notification = conversation_has_unread(
+            convo.other_id,
+            listing_id=None,
+            listing_type=convo.listing_type or "general",
+            latest_timestamp=latest_msg.timestamp if latest_msg else None,
+        )
         return {
             "other_id": convo.other_id,
             "email": convo.email,
@@ -1753,13 +1812,18 @@ def messages_list():
 
         if latest_msg:
             latest_event_time = latest_msg.timestamp
-            has_notification = latest_msg.sender_id != my_id
 
         if latest_deal and (latest_event_time is None or latest_deal.date > latest_event_time):
             latest_event_time = latest_deal.date
-            has_notification = latest_deal.starter_id != my_id
 
         last_time = latest_event_time or convo.last_time
+
+        has_notification = conversation_has_unread(
+            convo.other_id,
+            listing_id=convo.listing_id,
+            listing_type=convo.listing_type,
+            latest_timestamp=latest_event_time,
+        )
 
         return{
             "other_id": convo.other_id,
