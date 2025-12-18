@@ -2192,8 +2192,21 @@ def delete_need(need_id):
     db.session.commit()
     return redirect(url_for("my_profile"))
 
+#burası debug için
+import socket, os
 
+@app.get("/__debug")
+def __debug():
+    rules = sorted(r.rule for r in app.url_map.iter_rules())
+    return {
+        "host": socket.gethostname(),
+        "port": os.getenv("PORT"),
+        "has_profile": "/profile" in rules,
+        "rules_sample": rules[:30],
+        "rules_count": len(rules),
+    }
 
+#debug sonu
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000,debug=True)
 
