@@ -14,7 +14,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from sqlalchemy import or_, inspect, text
+from sqlalchemy import or_, inspect, text, func
 from config import ADMIN_EMAIL, ADMIN_PASSWORD, SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
 from datetime import datetime, timedelta
@@ -779,6 +779,11 @@ def find_related_listings(listing, listing_type, limit=3):
 @app.route("/")
 def index():
     query = request.args.get("q", "").strip()
+    date_from = parse_date_field(request.args.get("date_from"))
+    date_to = parse_date_field(request.args.get("date_to"))
+
+    offers_query = Offer.query.filter_by(is_active=True).join(User)
+    needs_query = Need.query.filter_by(is_active=True).join(User)
 
     if query:
         terms = fetch_wikidata_semantic_terms(query)
@@ -791,20 +796,29 @@ def index():
         offer_filter = build_listing_filter(Offer, terms)
         need_filter = build_listing_filter(Need, terms)
 
-        offers_query = Offer.query.filter_by(is_active=True).join(User)
-        needs_query = Need.query.filter_by(is_active=True).join(User)
-
         if offer_filter is not None:
             offers_query = offers_query.filter(offer_filter)
         if need_filter is not None:
             needs_query = needs_query.filter(need_filter)
 
-        offers = offers_query.all()
-        needs = needs_query.all()
-    else:
-        offers = Offer.query.filter_by(is_active=True).join(User).all()
-        needs = Need.query.filter_by(is_active=True).join(User).all()
+    if date_from:
+        offers_query = offers_query.filter(
+            func.coalesce(Offer.offered_on, func.date(Offer.posted_at)) >= date_from
+        )
+        needs_query = needs_query.filter(
+            func.coalesce(Need.needed_on, func.date(Need.posted_at)) >= date_from
+        )
 
+    if date_to:
+        offers_query = offers_query.filter(
+            func.coalesce(Offer.offered_on, func.date(Offer.posted_at)) <= date_to
+        )
+        needs_query = needs_query.filter(
+            func.coalesce(Need.needed_on, func.date(Need.posted_at)) <= date_to
+        )
+
+    offers = offers_query.all()
+    needs = needs_query.all()
     user_favorites = set()
     user_need_favorites = set()
     if "user_id" in session:
@@ -821,6 +835,8 @@ def index():
         user_favorites=user_favorites,
         user_need_favorites=user_need_favorites,
         search_query=query,
+        search_date_from=date_from,
+        search_date_to=date_to,
     )
 
 @app.route("/login", methods=["GET", "POST"])

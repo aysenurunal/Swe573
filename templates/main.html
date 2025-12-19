@@ -6,6 +6,14 @@
   <input type="text" name="q"
          placeholder="Search: keywords, tags, city/district"
          value="{{ request.args.get('q','') }}">
+      <input type="date" name="date_from"
+         aria-label="Start date"
+         value="{{ request.args.get('date_from','') }}"
+         style="min-width:150px;">
+  <input type="date" name="date_to"
+         aria-label="End date"
+         value="{{ request.args.get('date_to','') }}"
+         style="min-width:150px;">
   <button class="search-btn" type="submit">Search</button>
 </form>
 
