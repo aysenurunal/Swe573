@@ -85,9 +85,9 @@
         /* ---------------------- HOME GRID ---------------------- */
     .offers-needs-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
       gap: 16px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .offers-column,
@@ -95,6 +95,17 @@
       display: flex;
       flex-direction: column;
     }
+
+    .offers-needs-grid .offer-card,
+    .offers-needs-grid .need-card {
+      width: 100%;
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-sizing: border-box;
+    }
+
 
     .section-title {
       margin-top: 10px;
@@ -302,6 +313,32 @@
   <a href="/add-offer">Add Offer</a>
   <a href="/add-need">Add Need</a>
 </nav>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('invalid', (event) => {
+      const field = event.target;
+      if (typeof field.setCustomValidity !== 'function' || !field.validity) {
+        return;
+      }
+
+      if (field.validity.valueMissing) {
+        field.setCustomValidity('Please fill out this field.');
+      } else if (field.validity.typeMismatch && field.type === 'email') {
+        field.setCustomValidity('Please enter a valid email address.');
+      } else {
+        field.setCustomValidity('Please check this field.');
+      }
+    }, true);
+
+    document.addEventListener('input', (event) => {
+      const field = event.target;
+      if (typeof field.setCustomValidity === 'function') {
+        field.setCustomValidity('');
+      }
+    }, true);
+  });
+</script>
 
 </body>
 </html>

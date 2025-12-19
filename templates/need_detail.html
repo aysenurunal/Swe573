@@ -118,6 +118,33 @@
   <!-- MAP SECTION -->
   <h3 style="margin-top:15px;">Location on Map</h3>
   <div id="map" style="height:380px; border-radius:10px; margin-top:10px;"></div>
+    <!-- RELATED LISTINGS -->
+  <hr style="margin:24px 0; opacity:0.5;">
+  <h3>Suggested matches</h3>
+  {% if related_listings %}
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-top:10px;">
+      {% for suggestion in related_listings %}
+        {% set item = suggestion.item %}
+        <div style="padding:12px; border:1px solid #1f2937; border-radius:10px; background:#0b1727;">
+          <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:6px;">
+            {{ 'Offer' if suggestion.type == 'offer' else 'Need' }}
+            {% if item.location %} • {{ item.location }}{% endif %}
+          </div>
+          <h4 style="margin:0 0 8px 0;">
+            <a href="{{ url_for('offer_detail', offer_id=item.offer_id) if suggestion.type == 'offer' else url_for('need_detail', need_id=item.need_id) }}"
+               style="color:#e2e8f0; text-decoration:none;">
+              {{ item.title }}
+            </a>
+          </h4>
+          <p style="margin:0; color:#cbd5e1; font-size:0.95rem; line-height:1.4;">
+            {{ item.description[:140] }}{% if item.description|length > 140 %}...{% endif %}
+          </p>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p style="color:#94a3b8;">No related posts yet.</p>
+  {% endif %}
 
 </div>
 

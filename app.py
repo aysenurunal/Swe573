@@ -663,7 +663,84 @@ def build_listing_filter(model, terms):
         )
 
     return or_(*filters)
+def _collect_listing_terms(listing):
+    """Gather semantic and location-aware terms for a listing."""
 
+    terms = set()
+    title = (getattr(listing, "title", "") or "").strip()
+    description = (getattr(listing, "description", "") or "").strip()
+    location = (getattr(listing, "location", "") or "").strip()
+
+    if title:
+        terms.update(fetch_wikidata_semantic_terms(title))
+        terms.add(title.lower())
+
+    if description:
+        for part in re.split(r"[\n\.\,;]+", description):
+            part = part.strip().lower()
+            if len(part) >= 4:
+                terms.add(part)
+
+    if location:
+        terms.add(location.lower())
+
+    return {t for t in terms if t}
+
+
+def find_related_listings(listing, listing_type, limit=3):
+    """Return a small set of related offers/needs based on content & location."""
+
+    terms = _collect_listing_terms(listing)
+    base_location = (getattr(listing, "location", "") or "").lower().strip()
+
+    offer_query = Offer.query.filter_by(is_active=True)
+    need_query = Need.query.filter_by(is_active=True)
+
+    if listing_type == "offer":
+        offer_query = offer_query.filter(Offer.offer_id != listing.offer_id)
+    else:
+        need_query = need_query.filter(Need.need_id != listing.need_id)
+
+    offer_filter = build_listing_filter(Offer, terms)
+    need_filter = build_listing_filter(Need, terms)
+
+    if offer_filter is not None:
+        offer_query = offer_query.filter(offer_filter)
+    if need_filter is not None:
+        need_query = need_query.filter(need_filter)
+
+    candidates = [("offer", o) for o in offer_query.all()] + [
+        ("need", n) for n in need_query.all()
+    ]
+
+    def score(item):
+        text = f"{getattr(item, 'title', '')} {getattr(item, 'description', '')}".lower()
+        s = 0
+        for term in terms:
+            if term and term in text:
+                s += 1
+        loc = (getattr(item, "location", "") or "").lower()
+        if base_location and loc:
+            if base_location in loc or loc in base_location:
+                s += 2
+        return s
+
+    ranked = sorted(
+        ((kind, obj, score(obj)) for kind, obj in candidates),
+        key=lambda entry: (
+            entry[2],
+            getattr(entry[1], "offer_id", getattr(entry[1], "need_id", 0)),
+        ),
+        reverse=True,
+    )
+
+    suggestions = []
+    for kind, obj, _ in ranked:
+        if len(suggestions) >= limit:
+            break
+        suggestions.append({"type": kind, "item": obj})
+
+    return suggestions
 # ---------- ROUTES ----------
 
 @app.route("/")
@@ -1264,7 +1341,14 @@ def offer_detail(offer_id):
         favs = Favorite.query.filter_by(user_id=session["user_id"]).all()
         user_favorites = {f.offer_id for f in favs}
 
-    return render_template("offer_detail.html", offer=offer, user_favorites=user_favorites)
+    related_listings = find_related_listings(offer, "offer")
+
+    return render_template(
+        "offer_detail.html",
+        offer=offer,
+        user_favorites=user_favorites,
+        related_listings=related_listings,
+    )
 
 @app.route("/need/<int:need_id>")
 def need_detail(need_id):
@@ -1275,7 +1359,15 @@ def need_detail(need_id):
         favs = NeedFavorite.query.filter_by(user_id=session["user_id"]).all()
         user_need_favorites = {f.need_id for f in favs}
 
-    return render_template("need_detail.html", need=need, user_need_favorites=user_need_favorites)
+    related_listings = find_related_listings(need, "need")
+
+    return render_template(
+        "need_detail.html",
+        need=need,
+        user_need_favorites=user_need_favorites,
+        related_listings=related_listings,
+    )
+
 
 @app.route("/logout")
 def logout():
