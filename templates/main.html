@@ -23,8 +23,9 @@
         </a>
 
         <div class="card-meta">
+            {% set display_date = offer.offered_on if offer.offered_on else offer.posted_at %}
           {{ offer.hours }} hours — {{ offer.location }}
-          {% if offer.posted_at %} — {{ offer.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+          {% if display_date %} — {{ display_date.strftime('%d.%m.%Y') }}{% endif %}
         </div>
 
         <!-- OFFER FAVORITE -->
@@ -67,8 +68,9 @@
         </a>
 
         <div class="card-meta">
+            {% set display_date = need.needed_on if need.needed_on else need.posted_at %}
           {{ need.hours }} hours — {{ need.location }}
-          {% if need.posted_at %} — {{ need.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+          {% if display_date %} — {{ display_date.strftime('%d.%m.%Y') }}{% endif %}
         </div>
 
         <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">
