@@ -41,13 +41,13 @@
            value="{{ need.location if editing else '' }}"
            required
            style="margin-top:8px; width:100%; padding:10px;">
-    <!-- POST DATE -->
+    <!-- NEEDED ON DATE -->
     <label style="margin-top:12px; display:block; font-size:0.9rem;">
-        Post Date
+        Needed on
     </label>
     <input type="date"
-           name="posted_at"
-           value="{{ need.posted_at.strftime('%Y-%m-%d') if editing and need.posted_at else today_str }}"
+           name="needed_on"
+           value="{{ need.needed_on.strftime('%Y-%m-%d') if editing and need.needed_on else today_str }}"
            required
            style="margin-top:4px; width:100%; padding:10px;">
 

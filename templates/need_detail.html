@@ -21,7 +21,13 @@
           Not specified
         {% endif %}
       </p>
-
+        <p><strong>Needed on:</strong>
+        {% if need.needed_on %}
+          {{ need.needed_on.strftime('%d.%m.%Y') }}
+        {% else %}
+          Not specified
+        {% endif %}
+      </p>
 
       <p style="margin-top:12px;">
         {{ need.description }}

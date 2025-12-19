@@ -41,13 +41,13 @@
            value="{{ offer.location if editing else '' }}"
            required
            style="margin-top:8px; width:100%; padding:10px;">
-       <!-- POST DATE -->
+       <!-- OFFERED ON DATE -->
     <label style="margin-top:12px; display:block; font-size:0.9rem;">
-        Post Date
+        Offered on
     </label>
     <input type="date"
-           name="posted_at"
-           value="{{ offer.posted_at.strftime('%Y-%m-%d') if editing and offer.posted_at else today_str }}"
+           name="offered_on"
+           value="{{ offer.offered_on.strftime('%Y-%m-%d') if editing and offer.offered_on else today_str }}"
            required
            style="margin-top:4px; width:100%; padding:10px;">
     <!-- IMAGE UPLOAD -->

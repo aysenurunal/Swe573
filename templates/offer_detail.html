@@ -27,6 +27,13 @@
         {% else %}
           Not specified
         {% endif %}
+            <br>
+        <strong>Offered on:</strong>
+        {% if offer.offered_on %}
+          {{ offer.offered_on.strftime('%d.%m.%Y') }}
+        {% else %}
+          Not specified
+        {% endif %}
       </div>
 
       <!-- Favorite Button -->

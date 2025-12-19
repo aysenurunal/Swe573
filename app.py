@@ -50,19 +50,24 @@ def initialize_database():
         app.db_initialized = True
 
 def ensure_posted_at_columns():
-    """Backfill schema for posted_at columns if existing DB lacks them."""
+    """Backfill schema for posted_at/offered_on/needed_on columns if existing DB lacks them."""
     inspector = inspect(db.engine)
     with db.engine.begin() as conn:
         if "offer" in inspector.get_table_names():
             has_col = any(col["name"] == "posted_at" for col in inspector.get_columns("offer"))
             if not has_col:
                 conn.execute(text("ALTER TABLE offer ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+            has_offered_on = any(col["name"] == "offered_on" for col in inspector.get_columns("offer"))
+            if not has_offered_on:
+                conn.execute(text("ALTER TABLE offer ADD COLUMN offered_on DATE"))
 
         if "need" in inspector.get_table_names():
             has_col = any(col["name"] == "posted_at" for col in inspector.get_columns("need"))
             if not has_col:
                 conn.execute(text("ALTER TABLE need ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
-
+            has_needed_on = any(col["name"] == "needed_on" for col in inspector.get_columns("need"))
+            if not has_needed_on:
+                conn.execute(text("ALTER TABLE need ADD COLUMN needed_on DATE"))
 @app.before_request
 def enforce_ban():
     user_id = session.get("user_id")
@@ -138,16 +143,15 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def parse_posted_at(value):
-    """Parse a YYYY-MM-DD string into a datetime; fallback to now on error/empty."""
+def parse_date_field(value):
+    """Parse a YYYY-MM-DD string into a date; return None on missing/invalid input."""
     if not value:
-        return datetime.utcnow()
+        return None
 
     try:
-        parsed_date = datetime.strptime(value, "%Y-%m-%d")
-        return datetime.combine(parsed_date.date(), datetime.min.time())
+        return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError:
-        return datetime.utcnow()
+        return None
 
 def geocode_with_retry(address, attempts=3):
     """Best-effort geocoding helper used for creation and on-demand lookups."""
@@ -220,6 +224,7 @@ class Offer(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     posted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    offered_on = db.Column(db.Date, nullable=True)
 
 class Need(db.Model):
     need_id = db.Column(db.Integer, primary_key=True)
@@ -234,6 +239,7 @@ class Need(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     posted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    needed_on = db.Column(db.Date, nullable=True)
 
 class NeedFavorite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1050,7 +1056,7 @@ def add_need():
         title = request.form["title"]
         description = request.form["description"]
         hours = int(request.form["hours"])
-        posted_at_input = request.form.get("posted_at")
+        needed_on_input = request.form.get("needed_on")
 
         # RAW USER LOCATION (strip kullanıyoruz — capitalize yok)
         location_input = request.form["location"].strip()
@@ -1085,7 +1091,8 @@ def add_need():
             image_filename=image_filename,
             latitude=lat,
             longitude=lon,
-            posted_at=parse_posted_at(posted_at_input),
+            posted_at=datetime.utcnow(),
+            needed_on=parse_date_field(needed_on_input),
         )
 
         db.session.add(need)
@@ -1106,7 +1113,7 @@ def add_offer():
         description = request.form["description"]
         hours = int(request.form["hours"])
         location = request.form["location"].strip()
-        posted_at_input = request.form.get("posted_at")
+        offered_on_input = request.form.get("offered_on")
 
         loc = geocode_with_retry(location)
         lat = loc.latitude if loc else None
@@ -1138,7 +1145,8 @@ def add_offer():
             latitude=lat,
             longitude=lon,
             is_active=True,
-            posted_at=parse_posted_at(posted_at_input),
+            posted_at=datetime.utcnow(),
+            offered_on=parse_date_field(offered_on_input),
         )
 
         db.session.add(offer)
@@ -2295,7 +2303,7 @@ def edit_offer(offer_id):
         offer.hours = request.form["hours"]
         offer.location = request.form["location"].strip()
         offer.description = request.form["description"]
-        offer.posted_at = parse_posted_at(request.form.get("posted_at"))
+        offer.offered_on = parse_date_field(request.form.get("offered_on"))
 
         # 2) image güncelleme logic’i
         file = request.files.get("image")
@@ -2378,8 +2386,7 @@ def edit_need(need_id):
         need.hours = request.form["hours"]
         need.location = request.form["location"].strip()
         need.description = request.form["description"]
-        need.posted_at = parse_posted_at(request.form.get("posted_at"))
-
+        need.needed_on = parse_date_field(request.form.get("needed_on"))
         # 2) image güncelleme logic’i
         file = request.files.get("image")
         if file and allowed_file(file.filename):
