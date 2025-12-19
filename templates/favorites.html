@@ -18,7 +18,10 @@
         {{ offer.title }}
       </a>
 
-      <div class="card-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
+      <div class="card-meta">
+        {{ offer.hours }} hours — {{ offer.location }}
+        {% if offer.posted_at %} — {{ offer.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+      </div>
 
       <!-- UNFAV BUTTON -->
       <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
@@ -53,7 +56,10 @@
         {{ need.title }}
       </a>
 
-      <div class="card-meta">{{ need.hours }} hours — {{ need.location }}</div>
+      <div class="card-meta">
+        {{ need.hours }} hours — {{ need.location }}
+        {% if need.posted_at %} — {{ need.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+      </div>
 
       <!-- UNFAV BUTTON -->
       <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">

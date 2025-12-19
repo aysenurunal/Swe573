@@ -14,6 +14,14 @@
 
       <p><strong>Hours:</strong> {{ need.hours }}</p>
       <p><strong>Location:</strong> {{ need.location }}</p>
+        <p><strong>Posted on:</strong>
+        {% if need.posted_at %}
+          {{ need.posted_at.strftime('%d.%m.%Y') }}
+        {% else %}
+          Not specified
+        {% endif %}
+      </p>
+
 
       <p style="margin-top:12px;">
         {{ need.description }}

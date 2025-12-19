@@ -17,7 +17,10 @@
       </a>
 
       <!-- Meta -->
-      <div class="card-meta">{{ need.hours }} hours — {{ need.location }}</div>
+      <div class="card-meta">
+        {{ need.hours }} hours — {{ need.location }}
+        {% if need.posted_at %} — {{ need.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+      </div>
 
       <!-- FAVORITE BUTTON (correct route + correct set name) -->
       <form action="/toggle-need-favorite/{{ need.need_id }}" method="post" style="display:inline;">

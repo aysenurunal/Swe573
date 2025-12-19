@@ -13,8 +13,10 @@
         {{ offer.title }}
       </a>
 
-      <div class="card-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
-
+      <div class="card-meta">
+        {{ offer.hours }} hours — {{ offer.location }}
+        {% if offer.posted_at %} — {{ offer.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+      </div>
       <!-- FAVORITE BUTTON -->
       <form action="/toggle-favorite/{{ offer.offer_id }}" method="post" style="display:inline;">
         <button style="background:none; border:none; cursor:pointer; font-size:20px; color:red;">

@@ -14,7 +14,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from sqlalchemy import or_
+from sqlalchemy import or_, inspect, text
 from config import ADMIN_EMAIL, ADMIN_PASSWORD, SQLALCHEMY_DATABASE_URI, SECRET_KEY
 import ssl
 from datetime import datetime, timedelta
@@ -45,8 +45,23 @@ def initialize_database():
     if not getattr(app, "db_initialized", False):
         with app.app_context():
             db.create_all()
+            ensure_posted_at_columns()
             ensure_admin_user()
         app.db_initialized = True
+
+def ensure_posted_at_columns():
+    """Backfill schema for posted_at columns if existing DB lacks them."""
+    inspector = inspect(db.engine)
+    with db.engine.begin() as conn:
+        if "offer" in inspector.get_table_names():
+            has_col = any(col["name"] == "posted_at" for col in inspector.get_columns("offer"))
+            if not has_col:
+                conn.execute(text("ALTER TABLE offer ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+
+        if "need" in inspector.get_table_names():
+            has_col = any(col["name"] == "posted_at" for col in inspector.get_columns("need"))
+            if not has_col:
+                conn.execute(text("ALTER TABLE need ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
 
 @app.before_request
 def enforce_ban():
@@ -123,6 +138,16 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def parse_posted_at(value):
+    """Parse a YYYY-MM-DD string into a datetime; fallback to now on error/empty."""
+    if not value:
+        return datetime.utcnow()
+
+    try:
+        parsed_date = datetime.strptime(value, "%Y-%m-%d")
+        return datetime.combine(parsed_date.date(), datetime.min.time())
+    except ValueError:
+        return datetime.utcnow()
 
 def geocode_with_retry(address, attempts=3):
     """Best-effort geocoding helper used for creation and on-demand lookups."""
@@ -194,6 +219,7 @@ class Offer(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
+    posted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 class Need(db.Model):
     need_id = db.Column(db.Integer, primary_key=True)
@@ -207,6 +233,7 @@ class Need(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
+    posted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 class NeedFavorite(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1023,6 +1050,7 @@ def add_need():
         title = request.form["title"]
         description = request.form["description"]
         hours = int(request.form["hours"])
+        posted_at_input = request.form.get("posted_at")
 
         # RAW USER LOCATION (strip kullanıyoruz — capitalize yok)
         location_input = request.form["location"].strip()
@@ -1057,6 +1085,7 @@ def add_need():
             image_filename=image_filename,
             latitude=lat,
             longitude=lon,
+            posted_at=parse_posted_at(posted_at_input),
         )
 
         db.session.add(need)
@@ -1064,7 +1093,7 @@ def add_need():
 
         return redirect(url_for("index"))
 
-    return render_template("add_need.html")
+    return render_template("add_need.html", today_str=datetime.utcnow().strftime("%Y-%m-%d"))
 
 @app.route("/add-offer", methods=["GET", "POST"])
 @login_required
@@ -1077,6 +1106,7 @@ def add_offer():
         description = request.form["description"]
         hours = int(request.form["hours"])
         location = request.form["location"].strip()
+        posted_at_input = request.form.get("posted_at")
 
         loc = geocode_with_retry(location)
         lat = loc.latitude if loc else None
@@ -1108,6 +1138,7 @@ def add_offer():
             latitude=lat,
             longitude=lon,
             is_active=True,
+            posted_at=parse_posted_at(posted_at_input),
         )
 
         db.session.add(offer)
@@ -1115,7 +1146,7 @@ def add_offer():
 
         return redirect(url_for("index"))
 
-    return render_template("add_offer.html")
+    return render_template("add_offer.html", today_str=datetime.utcnow().strftime("%Y-%m-%d"))
 
 
 @app.route("/profile")
@@ -2264,6 +2295,7 @@ def edit_offer(offer_id):
         offer.hours = request.form["hours"]
         offer.location = request.form["location"].strip()
         offer.description = request.form["description"]
+        offer.posted_at = parse_posted_at(request.form.get("posted_at"))
 
         # 2) image güncelleme logic’i
         file = request.files.get("image")
@@ -2286,7 +2318,12 @@ def edit_offer(offer_id):
 
         return redirect(url_for("offer_detail", offer_id=offer_id))
 
-    return render_template("add_offer.html", offer=offer, editing=True)
+    return render_template(
+        "add_offer.html",
+        offer=offer,
+        editing=True,
+        today_str=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
 
 @app.route("/offer/<int:offer_id>/delete", methods=["POST"])
 def delete_offer(offer_id):
@@ -2341,6 +2378,7 @@ def edit_need(need_id):
         need.hours = request.form["hours"]
         need.location = request.form["location"].strip()
         need.description = request.form["description"]
+        need.posted_at = parse_posted_at(request.form.get("posted_at"))
 
         # 2) image güncelleme logic’i
         file = request.files.get("image")
@@ -2365,8 +2403,12 @@ def edit_need(need_id):
         return redirect(url_for("need_detail", need_id=need_id))
 
     # GET → edit formu
-    return render_template("add_need.html", need=need, editing=True)
-
+    return render_template(
+        "add_need.html",
+        need=need,
+        editing=True,
+        today_str=datetime.utcnow().strftime("%Y-%m-%d"),
+    )
 @app.route("/need/<int:need_id>/delete", methods=["POST"])
 def delete_need(need_id):
     if "user_id" not in session:

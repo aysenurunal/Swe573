@@ -42,7 +42,7 @@
 <div class="tab-buttons">
   <button class="tab-btn active" onclick="showTab('active')">ACTIVE POSTS</button>
   <button class="tab-btn" onclick="showTab('completed')">COMPLETED POSTS</button>
-    <button class="tab-btn" onclick="showTab('comments')">COMMENTS</button>
+  <button class="tab-btn" onclick="showTab('comments')">COMMENTS</button>
 </div>
 
 <hr>
@@ -55,7 +55,10 @@
     {% for offer in active_offers %}
       <a href="{{ url_for('offer_detail', offer_id=offer.offer_id) }}" class="post-card">
         <div class="post-title">{{ offer.title }}</div>
-        <div class="post-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
+        <div class="post-meta">
+          {{ offer.hours }} hours — {{ offer.location }}
+          {% if offer.posted_at %} — {{ offer.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+        </div>
       </a>
     {% endfor %}
   {% else %}
@@ -67,8 +70,11 @@
     {% for need in active_needs %}
       <a href="{{ url_for('need_detail', need_id=need.need_id) }}" class="post-card">
         <div class="post-title">{{ need.title }}</div>
-        <div class="post-meta">{{ need.hours }} hours — {{ need.location }}</div>
-      </a>
+        <div class="post-meta">
+          {{ need.hours }} hours — {{ need.location }}
+          {% if need.posted_at %} — {{ need.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+        </div>
+      </a>  {# ✅ EKSİK OLAN KAPANIŞ BUYDU #}
     {% endfor %}
   {% else %}
     <p>No active needs.</p>
@@ -84,7 +90,10 @@
     {% for offer in completed_offers %}
       <div class="post-card completed">
         <div class="post-title">{{ offer.title }}</div>
-        <div class="post-meta">{{ offer.hours }} hours — {{ offer.location }}</div>
+        <div class="post-meta">
+          {{ offer.hours }} hours — {{ offer.location }}
+          {% if offer.posted_at %} — {{ offer.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+        </div>
           {% set key = 'offer:' ~ offer.offer_id %}
         {% if listing_comments.get(key) %}
           {% for comment in listing_comments[key] %}
@@ -105,7 +114,10 @@
     {% for need in completed_needs %}
       <div class="post-card completed">
         <div class="post-title">{{ need.title }}</div>
-        <div class="post-meta">{{ need.hours }} hours — {{ need.location }}</div>
+        <div class="post-meta">
+          {{ need.hours }} hours — {{ need.location }}
+          {% if need.posted_at %} — {{ need.posted_at.strftime('%d.%m.%Y') }}{% endif %}
+        </div>
           {% set key = 'need:' ~ need.need_id %}
         {% if listing_comments.get(key) %}
           {% for comment in listing_comments[key] %}
@@ -235,7 +247,7 @@ function showTab(tab) {
   document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
 
   // Show selected
-    const tabMap = {
+  const tabMap = {
     "active": 0,
     "completed": 1,
     "comments": 2
@@ -247,7 +259,8 @@ function showTab(tab) {
   const index = tabMap[tab];
   if (index !== undefined) {
     const btn = document.querySelectorAll(".tab-btn")[index];
-    if (btn) btn.classList.add("active");}
+    if (btn) btn.classList.add("active");
+  }
 }
 </script>
 

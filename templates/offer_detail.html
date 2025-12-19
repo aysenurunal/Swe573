@@ -20,6 +20,13 @@
         <strong>Hours:</strong> {{ offer.hours }}
         <br>
         <strong>Location:</strong> {{ offer.location }}
+          <br>
+        <strong>Posted on:</strong>
+        {% if offer.posted_at %}
+          {{ offer.posted_at.strftime('%d.%m.%Y') }}
+        {% else %}
+          Not specified
+        {% endif %}
       </div>
 
       <!-- Favorite Button -->
