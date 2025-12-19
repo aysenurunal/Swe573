@@ -779,8 +779,7 @@ def find_related_listings(listing, listing_type, limit=3):
 @app.route("/")
 def index():
     query = request.args.get("q", "").strip()
-    date_from = parse_date_field(request.args.get("date_from"))
-    date_to = parse_date_field(request.args.get("date_to"))
+    search_date = parse_date_field(request.args.get("date"))
 
     offers_query = Offer.query.filter_by(is_active=True).join(User)
     needs_query = Need.query.filter_by(is_active=True).join(User)
@@ -801,24 +800,13 @@ def index():
         if need_filter is not None:
             needs_query = needs_query.filter(need_filter)
 
-    if date_from:
-        offers_query = offers_query.filter(
-            func.coalesce(Offer.offered_on, func.date(Offer.posted_at)) >= date_from
-        )
-        needs_query = needs_query.filter(
-            func.coalesce(Need.needed_on, func.date(Need.posted_at)) >= date_from
-        )
-
-    if date_to:
-        offers_query = offers_query.filter(
-            func.coalesce(Offer.offered_on, func.date(Offer.posted_at)) <= date_to
-        )
-        needs_query = needs_query.filter(
-            func.coalesce(Need.needed_on, func.date(Need.posted_at)) <= date_to
-        )
+    if search_date:
+        offers_query = offers_query.filter(Offer.offered_on == search_date)
+        needs_query = needs_query.filter(Need.needed_on == search_date)
 
     offers = offers_query.all()
     needs = needs_query.all()
+
     user_favorites = set()
     user_need_favorites = set()
     if "user_id" in session:
@@ -835,8 +823,7 @@ def index():
         user_favorites=user_favorites,
         user_need_favorites=user_need_favorites,
         search_query=query,
-        search_date_from=date_from,
-        search_date_to=date_to,
+        search_date=search_date,
     )
 
 @app.route("/login", methods=["GET", "POST"])
