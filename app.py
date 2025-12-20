@@ -52,11 +52,17 @@ def initialize_database():
 def ensure_posted_at_columns():
     """Backfill schema for posted_at/offered_on/needed_on columns if existing DB lacks them."""
     inspector = inspect(db.engine)
+    is_sqlite = db.engine.dialect.name == "sqlite"
     with db.engine.begin() as conn:
         if "offer" in inspector.get_table_names():
             has_col = any(col["name"] == "posted_at" for col in inspector.get_columns("offer"))
             if not has_col:
-                conn.execute(text("ALTER TABLE offer ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                if is_sqlite:
+                    conn.execute(text("ALTER TABLE offer ADD COLUMN posted_at DATETIME"))
+                    conn.execute(text("UPDATE offer SET posted_at = CURRENT_TIMESTAMP WHERE posted_at IS NULL"))
+                else:
+                    conn.execute(text("ALTER TABLE offer ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+
             has_offered_on = any(col["name"] == "offered_on" for col in inspector.get_columns("offer"))
             if not has_offered_on:
                 conn.execute(text("ALTER TABLE offer ADD COLUMN offered_on DATE"))
@@ -64,7 +70,11 @@ def ensure_posted_at_columns():
         if "need" in inspector.get_table_names():
             has_col = any(col["name"] == "posted_at" for col in inspector.get_columns("need"))
             if not has_col:
-                conn.execute(text("ALTER TABLE need ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                if is_sqlite:
+                    conn.execute(text("ALTER TABLE need ADD COLUMN posted_at DATETIME"))
+                    conn.execute(text("UPDATE need SET posted_at = CURRENT_TIMESTAMP WHERE posted_at IS NULL"))
+                else:
+                    conn.execute(text("ALTER TABLE need ADD COLUMN posted_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
             has_needed_on = any(col["name"] == "needed_on" for col in inspector.get_columns("need"))
             if not has_needed_on:
                 conn.execute(text("ALTER TABLE need ADD COLUMN needed_on DATE"))
