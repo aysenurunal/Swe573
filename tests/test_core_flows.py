@@ -772,3 +772,4 @@ def test_deal_completion_stores_comments_and_blocks_duplicates(client):
         listing = Offer.query.get(offer_id)
         assert status == "completed"
         assert listing.is_active is False
+
