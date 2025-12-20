@@ -18,6 +18,8 @@ from app import (
     Transaction,
     User,
     UserBlock,
+    Comment,
+    Message,
     bcrypt,
     db,
     ensure_admin_user,
@@ -453,3 +455,320 @@ def test_semantic_search_fallback_when_no_terms(monkeypatch, client):
     response = client.get("/?q=Gardening")
     assert response.status_code == 200
     assert b"Gardening help" in response.data
+
+def test_date_filters_match_offered_and_needed_dates(client):
+    with flask_app.app.app_context():
+        owner = create_user("filterer@example.com")
+        target_date = flask_app.datetime(2024, 5, 1).date()
+        other_date = flask_app.datetime(2024, 6, 1).date()
+
+        matched_offer = Offer(
+            user_id=owner.user_id,
+            title="Date-matched offer",
+            description="Should appear",
+            hours=1,
+            location="Bursa",
+            is_active=True,
+            offered_on=target_date,
+        )
+        skipped_offer = Offer(
+            user_id=owner.user_id,
+            title="Later offer",
+            description="Should be filtered out",
+            hours=1,
+            location="Ankara",
+            is_active=True,
+            offered_on=other_date,
+        )
+
+        matched_need = Need(
+            user_id=owner.user_id,
+            title="Date-matched need",
+            description="Need on target day",
+            hours=1,
+            location="Izmir",
+            is_active=True,
+            needed_on=target_date,
+        )
+        skipped_need = Need(
+            user_id=owner.user_id,
+            title="Later need",
+            description="Should be filtered out",
+            hours=1,
+            location="Istanbul",
+            is_active=True,
+            needed_on=other_date,
+        )
+        db.session.add_all([matched_offer, skipped_offer, matched_need, skipped_need])
+        db.session.commit()
+
+    resp = client.get("/?date=2024-05-01")
+    assert resp.status_code == 200
+    assert b"Date-matched offer" in resp.data
+    assert b"Date-matched need" in resp.data
+    assert b"Later offer" not in resp.data
+    assert b"Later need" not in resp.data
+
+
+def test_offer_and_need_online_flag_set_from_location(client):
+    creator = create_user("online@example.com")
+    login_as(client, creator)
+
+    offer_resp = client.post(
+        "/add-offer",
+        data={
+            "title": "Remote tutoring",
+            "description": "Math over video",
+            "hours": 2,
+            "location": "Online only",
+            "offered_on": "2024-05-05",
+        },
+        follow_redirects=True,
+    )
+    assert offer_resp.status_code == 200
+
+    need_resp = client.post(
+        "/add-need",
+        data={
+            "title": "Local help",
+            "description": "In-person support",
+            "hours": 1,
+            "location": "Ankara",
+            "needed_on": "2024-05-06",
+        },
+        follow_redirects=True,
+    )
+    assert need_resp.status_code == 200
+
+    with flask_app.app.app_context():
+        offer = Offer.query.filter_by(title="Remote tutoring").first()
+        need = Need.query.filter_by(title="Local help").first()
+        assert offer is not None and offer.is_online is True
+        assert need is not None and need.is_online is False
+
+
+def test_reports_are_routed_to_admin(client):
+    reporter = create_user("reporter@example.com")
+    reported = create_user("reported@example.com")
+    with flask_app.app.app_context():
+        admin = ensure_admin_user()
+
+    login_as(client, reporter)
+    resp = client.post(
+        f"/report/{reported.user_id}",
+        data={"reason": "Spam content"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+
+    with flask_app.app.app_context():
+        saved = (
+            Message.query.filter_by(listing_type="report", receiver_id=admin.user_id)
+            .order_by(Message.timestamp.desc())
+            .first()
+        )
+        assert saved is not None
+        assert "Spam content" in saved.content
+        assert str(reported.user_id) in saved.content
+
+
+def test_location_search_matches_listing_addresses(monkeypatch, client):
+    monkeypatch.setattr(flask_app, "fetch_wikidata_semantic_terms", lambda q: {q.lower()})
+
+    with flask_app.app.app_context():
+        izmir_offer = Offer(
+            user_id=create_user("loc@example.com").user_id,
+            title="Yoga class",
+            description="Stretching together",
+            hours=1,
+            location="Izmir",
+            is_active=True,
+        )
+        ank_offer = Offer(
+            user_id=create_user("ank@example.com").user_id,
+            title="Gardening elsewhere",
+            description="Plants and trees",
+            hours=1,
+            location="Ankara",
+            is_active=True,
+        )
+        db.session.add_all([izmir_offer, ank_offer])
+        db.session.commit()
+
+    resp = client.get("/?q=Izmir")
+    assert resp.status_code == 200
+    assert b"Yoga class" in resp.data
+    assert b"Gardening elsewhere" not in resp.data
+
+def test_related_listings_render_for_offers_and_needs(monkeypatch, client):
+    # avoid outbound Wikidata requests
+    monkeypatch.setattr(flask_app, "fetch_wikidata_semantic_terms", lambda q: {q.lower()})
+
+    with flask_app.app.app_context():
+        author = create_user("rel@example.com")
+        viewer = create_user("viewer@example.com")
+
+        main_offer = Offer(
+            user_id=author.user_id,
+            title="Guitar lessons",
+            description="Acoustic guitar basics in Izmir",
+            hours=2,
+            location="Izmir",
+            is_active=True,
+        )
+        main_need = Need(
+            user_id=author.user_id,
+            title="Looking for guitar practice",
+            description="Need guidance on chords",
+            hours=1,
+            location="Ankara",
+            is_active=True,
+        )
+
+        related_need = Need(
+            user_id=viewer.user_id,
+            title="Need guitar help",
+            description="Acoustic guitar lessons appreciated",
+            hours=1,
+            location="Izmir",
+            is_active=True,
+        )
+        related_offer = Offer(
+            user_id=viewer.user_id,
+            title="Guitar tutoring session",
+            description="Guitar chords and practice together",
+            hours=1,
+            location="Ankara",
+            is_active=True,
+        )
+        unrelated_offer = Offer(
+            user_id=viewer.user_id,
+            title="Plumbing services",
+            description="Fix pipes",
+            hours=1,
+            location="Bursa",
+            is_active=True,
+        )
+
+        db.session.add_all(
+            [main_offer, main_need, related_need, related_offer, unrelated_offer]
+        )
+        db.session.commit()
+
+        main_offer_id = main_offer.offer_id
+        main_need_id = main_need.need_id
+
+    # Offer detail should suggest related need by semantic/location match
+    offer_resp = client.get(f"/offer/{main_offer_id}")
+    assert offer_resp.status_code == 200
+    assert b"Need guitar help" in offer_resp.data
+    assert b"Plumbing services" not in offer_resp.data
+
+    # Need detail should suggest related offer
+    need_resp = client.get(f"/need/{main_need_id}")
+    assert need_resp.status_code == 200
+    assert b"Guitar tutoring session" in need_resp.data
+    assert b"Plumbing services" not in need_resp.data
+
+
+
+def test_accept_blocks_when_earner_reaches_max_balance(client):
+    earner = create_user("earner@example.com", balance=10)
+    payer = create_user("payer@example.com", balance=5)
+
+    with flask_app.app.app_context():
+        offer = Offer(
+            user_id=earner.user_id,
+            title="Full capacity offer",
+            description="Should not be accepted",
+            hours=2,
+            location="Istanbul",
+            is_active=True,
+        )
+        db.session.add(offer)
+        db.session.commit()
+
+        deal = Transaction(
+            listing_type="offer",
+            listing_id=offer.offer_id,
+            starter_id=payer.user_id,
+            receiver_id=earner.user_id,
+            hours=2,
+            date=flask_app.datetime.utcnow(),
+            status="pending",
+        )
+        db.session.add(deal)
+        db.session.commit()
+        deal_id = deal.id
+
+    login_as(client, earner)
+    resp = client.post(f"/deal/accept/{deal_id}")
+    assert resp.status_code == 200
+    assert b"exceeds timebank limits" in resp.data
+
+    with flask_app.app.app_context():
+        refreshed = Transaction.query.get(deal_id)
+        assert refreshed.status == "pending"
+
+
+def test_deal_completion_stores_comments_and_blocks_duplicates(client):
+    offer_owner = create_user("owner3@example.com", balance=6)
+    requester = create_user("requester3@example.com", balance=4)
+
+    with flask_app.app.app_context():
+        offer = Offer(
+            user_id=offer_owner.user_id,
+            title="Cooking lesson",
+            description="Teach cooking",
+            hours=2,
+            location="Istanbul",
+            is_active=True,
+        )
+        db.session.add(offer)
+        db.session.commit()
+        offer_id = offer.offer_id
+
+        deal = Transaction(
+            listing_type="offer",
+            listing_id=offer.offer_id,
+            starter_id=requester.user_id,
+            receiver_id=offer_owner.user_id,
+            hours=1,
+            date=flask_app.datetime.utcnow(),
+            status="accepted",
+        )
+        db.session.add(deal)
+        db.session.commit()
+        deal_id = deal.id
+
+    login_as(client, requester)
+    first = client.post(
+        f"/deal/complete/{deal_id}",
+        data={"comment": "Great experience"},
+        follow_redirects=True,
+    )
+    assert first.status_code == 200
+
+    duplicate = client.post(
+        f"/deal/complete/{deal_id}",
+        data={"comment": "Trying again"},
+        follow_redirects=False,
+    )
+    assert duplicate.status_code == 400
+    assert b"already submitted a comment" in duplicate.data
+
+    login_as(client, offer_owner)
+    second = client.post(
+        f"/deal/complete/{deal_id}",
+        data={"comment": "Good student"},
+        follow_redirects=True,
+    )
+    assert second.status_code == 200
+
+    with flask_app.app.app_context():
+        comments = Comment.query.filter_by(transaction_id=deal_id).all()
+        assert len(comments) == 2
+        status = Transaction.query.get(deal_id).status
+        listing = Offer.query.get(offer_id)
+        assert status == "completed"
+        assert listing.is_active is False
